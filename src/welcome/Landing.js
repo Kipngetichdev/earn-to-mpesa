@@ -1,18 +1,34 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import logo from '../assets/logo.png'; // Placeholder; replace with actual logo
+import logo from '../assets/logo.png';
+import logo1 from '../assets/logo1.png';
+import logo2 from '../assets/logo2.png';
+
+const logos = [logo, logo1, logo2];
 
 const Landing = () => {
   const navigate = useNavigate();
+  const [currentLogoIndex, setCurrentLogoIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentLogoIndex((prevIndex) => (prevIndex + 1) % logos.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="min-h-screen bg-secondary font-roboto">
       {/* Hero Section */}
       <section className="bg-primary text-white text-center py-16 px-4">
-        <img src={logo} alt="Earn to M-Pesa Logo" className="w-24 h-24 mx-auto mb-4" />
+        <img
+          src={logos[currentLogoIndex]}
+          alt="Earn to M-Pesa Logo"
+          className="w-24 h-24 mx-auto mb-4 animate-fade"
+        />
         <h1 className="text-4xl font-bold font-roboto md:text-5xl">Welcome to Earn to M-Pesa</h1>
         <p className="text-lg mt-4 font-roboto md:text-xl">
+          <p>Turn Your Smartphone into a Daily Payday. </p>
           Earn up to <span className="text-highlight">KSh 3000</span> from home with simple tasks!
         </p>
         <div className="mt-6 space-x-4">
@@ -78,4 +94,4 @@ const Landing = () => {
   );
 };
 
-export default Landing;
+export default Landing
