@@ -1,6 +1,7 @@
 import React, { useContext } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
+import BottomNav from './components/BottomNav';
 import Reward from './components/Reward';
 import Landing from './welcome/Landing';
 import Signup from './welcome/Signup';
@@ -11,36 +12,41 @@ import Earnings from './pages/Earnings';
 import Refer from './pages/Refer';
 
 const App = () => {
-  const { user, loading } = useContext(AuthContext);
+  const { user, loading, userData } = useContext(AuthContext);
 
   if (loading) return null;
 
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/signin" element={<Signin />} />
-      <Route
-        path="/reward"
-        element={user ? <Reward /> : <Navigate to="/signin" />}
-      />
-      <Route
-        path="/home"
-        element={user ? <Home /> : <Navigate to="/signin" />}
-      />
-      <Route
-        path="/tasks"
-        element={user ? <Tasks /> : <Navigate to="/signin" />}
-      />
-      <Route
-        path="/earnings"
-        element={user ? <Earnings /> : <Navigate to="/signin" />}
-      />
-      <Route
-        path="/refer"
-        element={user ? <Refer /> : <Navigate to="/signin" />}
-      />
-    </Routes>
+    <div className="min-h-screen bg-secondary font-roboto flex flex-col">
+      <div className="flex-grow pb-16"> {/* Padding for BottomNav */}
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/signin" element={<Signin />} />
+          <Route
+            path="/reward"
+            element={user ? <Reward /> : <Navigate to="/signin" />}
+          />
+          <Route
+            path="/home"
+            element={user ? <Home earnings={userData?.earnings || 0} /> : <Navigate to="/signin" />}
+          />
+          <Route
+            path="/tasks"
+            element={user ? <Tasks completeTask={() => {}} /> : <Navigate to="/signin" />}
+          />
+          <Route
+            path="/earnings"
+            element={user ? <Earnings history={userData?.history || []} /> : <Navigate to="/signin" />}
+          />
+          <Route
+            path="/refer"
+            element={user ? <Refer completeTask={() => {}} /> : <Navigate to="/signin" />}
+          />
+        </Routes>
+      </div>
+      <BottomNav />
+    </div>
   );
 };
 

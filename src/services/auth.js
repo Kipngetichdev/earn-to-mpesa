@@ -28,7 +28,7 @@ export const signup = async ({ username, email, password, phone }) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate unique user ID (using timestamp + random string)
+    // Generate unique user ID
     const userId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 
     // Store user data in Firestore
@@ -40,6 +40,7 @@ export const signup = async ({ username, email, password, phone }) => {
       earnings: 0,
       history: [],
       createdAt: new Date().toISOString(),
+      userCollectedReward: false,
     });
 
     return { user: { uid: userId, username, email, phone }, error: null };
@@ -102,7 +103,7 @@ export const signin = async ({ identifier, password }) => {
 };
 
 export const signout = async () => {
-  return { error: null }; // No-op for Firestore-only auth
+  return { error: null };
 };
 
 export const getUserData = async (userId) => {

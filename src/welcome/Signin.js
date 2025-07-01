@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signin } from '../services/auth';
+import { signin, getUserData } from '../services/auth';
 import { AuthContext } from '../context/AuthContext';
 import logo from '../assets/logo.png';
 
@@ -38,11 +38,17 @@ const Signin = () => {
     if (validate()) {
       setLoading(true);
       const { user, error } = await signin(formData);
-      setLoading(false);
       if (user) {
         login(user);
-        navigate('/reward');
+        const { data, error: userDataError } = await getUserData(user.uid);
+        setLoading(false);
+        if (data && !userDataError) {
+          navigate(data.userCollectedReward ? '/home' : '/reward');
+        } else {
+          setErrors({ form: userDataError || 'Failed to fetch user data' });
+        }
       } else {
+        setLoading(false);
         setErrors({ form: error || 'Signin failed' });
       }
     }

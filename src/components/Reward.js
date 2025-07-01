@@ -46,6 +46,7 @@ const Reward = () => {
           reward: rewardValue,
           date: new Date().toLocaleString(),
         }),
+        userCollectedReward: true,
       });
     }
 
