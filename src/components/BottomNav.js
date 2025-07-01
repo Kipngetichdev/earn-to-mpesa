@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { NavLink } from 'react-router-dom';
-import { HomeIcon, ClipboardDocumentListIcon, UserPlusIcon, CurrencyDollarIcon } from '@heroicons/react/24/solid';
+import { HomeIcon, PuzzlePieceIcon, UserPlusIcon, CurrencyDollarIcon } from '@heroicons/react/24/solid';
 import { AuthContext } from '../context/AuthContext';
 
 const BottomNav = () => {
@@ -10,7 +10,7 @@ const BottomNav = () => {
 
   const navItems = [
     { path: '/home', label: 'Home', icon: HomeIcon },
-    { path: '/tasks', label: 'Games', icon: ClipboardDocumentListIcon },
+    { path: '/tasks', label: 'Games', icon: PuzzlePieceIcon },
     { path: '/refer', label: 'Refer', icon: UserPlusIcon },
     { path: '/earnings', label: 'Wallet', icon: CurrencyDollarIcon },
   ];
@@ -27,7 +27,7 @@ const BottomNav = () => {
             }`
           }
         >
-          <item.icon className={`h-6 w-6 ${item.path === window.location.pathname ? 'text-primary' : 'text-highlight'}`} />
+          <item.icon className="h-6 w-6" />
           <span>{item.label}</span>
         </NavLink>
       ))}
