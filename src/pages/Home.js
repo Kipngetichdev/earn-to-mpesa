@@ -1,16 +1,12 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { db } from '../services/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import QuizCategories from '../components/QuizCategories';
 import surveyImage from '../assets/survey.png';
 
 const Home = ({ earnings }) => {
   const { user, userData } = useContext(AuthContext);
   const [selectedPlan, setSelectedPlan] = useState(userData?.plan || 'free');
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   // Get current time in EAT (UTC+3) and greeting with emoji
   const getGreeting = () => {
@@ -23,37 +19,8 @@ const Home = ({ earnings }) => {
 
   const { text: greetingText, emoji } = getGreeting();
 
-  // Fetch categories based on plan
-  const fetchCategories = async (plan) => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch('https://opentdb.com/api_category.php');
-      const data = await response.json();
-      const allCategories = data.trivia_categories.sort((a, b) => a.name.localeCompare(b.name));
-      let limit;
-      if (plan === 'free') limit = 5;
-      else if (plan === 'standard') limit = 15;
-      else limit = 20;
-      setCategories(allCategories.slice(0, limit));
-      // Update Firestore with selected plan
-      if (user) {
-        await updateDoc(doc(db, 'users', user.uid), { plan });
-      }
-    } catch (err) {
-      setError('Failed to fetch categories.');
-    }
-    setLoading(false);
-  };
-
-  // Initial fetch based on user's plan
-  useEffect(() => {
-    fetchCategories(selectedPlan);
-  }, [selectedPlan, user]);
-
   const handlePlanSelect = (plan) => {
     setSelectedPlan(plan);
-    fetchCategories(plan);
   };
 
   return (
@@ -120,27 +87,7 @@ const Home = ({ earnings }) => {
             Premium {selectedPlan === 'premium' && <CheckCircleIcon className="h-5 w-5 inline-block ml-1" />}
           </button>
         </div>
-        <div className="mt-4 height-auto">
-          <h3 className="text-lg font-bold text-primary mb-2">Quiz Categories</h3>
-          {loading ? (
-            <p className="text-primary font-roboto">Loading categories...</p>
-          ) : error ? (
-            <p className="text-highlight font-roboto">{error}</p>
-          ) : categories.length > 0 ? (
-            <div className="mb-4 overflow-y-auto space-y-2">
-              {categories.map((category) => (
-                <div
-                  key={category.id}
-                  className="bg-white border border-primary rounded p-2 text-primary font-roboto hover:bg-secondary transition duration-300"
-                >
-                  {category.name}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-primary font-roboto">No categories available.</p>
-          )}
-        </div>
+        <QuizCategories plan={selectedPlan} user={user} />
       </div>
     </div>
   );
