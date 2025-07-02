@@ -7,6 +7,18 @@ import {
   BookOpenIcon,
   TvIcon,
   UserGroupIcon,
+  MusicalNoteIcon,
+  TvIcon as AnimeIcon,
+  SpeakerWaveIcon,
+  GlobeAmericasIcon,
+  BuildingLibraryIcon,
+  SparklesIcon,
+  StarIcon,
+  PuzzlePieceIcon,
+  TrophyIcon,
+  LightBulbIcon,
+  ComputerDesktopIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/outline';
 
 const QuizCategories = ({ plan, user }) => {
@@ -14,38 +26,74 @@ const QuizCategories = ({ plan, user }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Map icons to Free tier categories (first 5 after sorting)
+  // Map icons to Free, Standard, and Premium tier categories (sorted)
   const iconMap = {
+    // Free tier (indices 0–4)
     'Art': PaintBrushIcon,
     'Entertainment: Books': BookOpenIcon,
     'Entertainment: Cartoon & Animations': TvIcon,
     'Entertainment: Comics': BookOpenIcon,
     'Entertainment: Film': FilmIcon,
+    // Standard tier (indices 5–14)
+    'Entertainment: Japanese Anime & Manga': AnimeIcon,
+    'Entertainment: Music': MusicalNoteIcon,
+    'Entertainment: Musicals & Theatres': SpeakerWaveIcon,
+    'Entertainment: Television': TvIcon,
+    'Entertainment: Video Games': PuzzlePieceIcon,
+    'General Knowledge': LightBulbIcon,
+    'Geography': GlobeAmericasIcon,
+    'History': BuildingLibraryIcon,
+    'Mythology': SparklesIcon,
+    'Politics': StarIcon,
+    // Premium tier (indices 15–19)
+    'Science: Computers': ComputerDesktopIcon,
+    'Science: Gadgets': ComputerDesktopIcon,
+    'Science: Mathematics': BeakerIcon,
+    'Science & Nature': BeakerIcon,
+    'Sports': TrophyIcon,
   };
 
-  // Generate random duration (1.5 to 2 minutes)
-  const getRandomDuration = () => {
-    const duration = (Math.random() * (2 - 1.5) + 1.5).toFixed(1);
+  // Generate random duration for Free (1.5–2 min), Standard (2–3 min), or Premium (3–4 min)
+  const getRandomDuration = (tier) => {
+    const range = tier === 'free' ? [1.5, 2] : tier === 'standard' ? [2, 3] : [3, 4];
+    const duration = (Math.random() * (range[1] - range[0]) + range[0]).toFixed(1);
     return `${duration} min`;
   };
 
-  // Generate random reward (KSh 4 to 8)
-  const getRandomReward = () => {
-    const reward = (Math.random() * (8 - 4) + 4).toFixed(2);
+  // Generate random reward for Free (KSh 4–8), Standard (KSh 80–170), or Premium (KSh 200–350)
+  const getRandomReward = (tier) => {
+    const range = tier === 'free' ? [4, 8] : tier === 'standard' ? [80, 170] : [200, 350];
+    const reward = (Math.random() * (range[1] - range[0]) + range[0]).toFixed(2);
     return `KSh ${reward}`;
   };
 
-  // Get or set fixed Duration and Reward for Free tier from localStorage
-  const getFreeTierMetadata = () => {
-    const stored = localStorage.getItem('freeTierMetadata');
+  // Generate unique rewards for Free, Standard, or Premium tier categories
+  const generateUniqueRewards = (count, min, max) => {
+    const rewards = new Set();
+    while (rewards.size < count) {
+      const reward = (Math.random() * (max - min) + min).toFixed(2);
+      rewards.add(reward);
+    }
+    return Array.from(rewards).map(reward => `KSh ${reward}`);
+  };
+
+  // Get or set fixed Duration and Rewards for Free, Standard, or Premium tier from localStorage
+  const getTierMetadata = (tier, categories = []) => {
+    const key = `${tier}TierMetadata`;
+    const stored = localStorage.getItem(key);
     if (stored) {
       return JSON.parse(stored);
     }
     const metadata = {
-      duration: getRandomDuration(),
-      reward: getRandomReward(),
+      duration: getRandomDuration(tier),
+      rewards: categories.reduce((acc, category, index) => {
+        const min = tier === 'free' ? 4 : tier === 'standard' ? 80 : 200;
+        const max = tier === 'free' ? 8 : tier === 'standard' ? 170 : 350;
+        acc[category.id] = generateUniqueRewards(categories.length, min, max)[index] || `KSh ${min.toFixed(2)}`;
+        return acc;
+      }, {}),
     };
-    localStorage.setItem('freeTierMetadata', JSON.stringify(metadata));
+    localStorage.setItem(key, JSON.stringify(metadata));
     return metadata;
   };
 
@@ -75,16 +123,26 @@ const QuizCategories = ({ plan, user }) => {
       
       let selectedCategories;
       if (plan === 'free') {
-        const { duration, reward } = getFreeTierMetadata();
+        const { duration, rewards } = getTierMetadata('free', freeCategories);
         selectedCategories = shuffleArray(freeCategories).map(category => ({
           ...category,
           duration,
-          reward,
+          reward: rewards[category.id] || `KSh 4.00`, // Fallback reward
         }));
       } else if (plan === 'standard') {
-        selectedCategories = shuffleArray(standardCategories);
+        const { duration, rewards } = getTierMetadata('standard', standardCategories);
+        selectedCategories = shuffleArray(standardCategories).map(category => ({
+          ...category,
+          duration,
+          reward: rewards[category.id] || `KSh 80.00`, // Fallback reward
+        }));
       } else {
-        selectedCategories = shuffleArray(premiumCategories);
+        const { duration, rewards } = getTierMetadata('premium', premiumCategories);
+        selectedCategories = shuffleArray(premiumCategories).map(category => ({
+          ...category,
+          duration,
+          reward: rewards[category.id] || `KSh 200.00`, // Fallback reward
+        }));
       }
       
       setCategories(selectedCategories);
@@ -114,7 +172,7 @@ const QuizCategories = ({ plan, user }) => {
         <div className="mb-4 overflow-y-auto space-y-2">
           {categories.map((category) => {
             const Icon = iconMap[category.name] || UserGroupIcon; // Fallback icon
-            return plan === 'free' ? (
+            return (
               <div
                 key={category.id}
                 className="bg-white border border-primary rounded p-2 text-primary font-roboto hover:bg-secondary transition duration-300 flex items-center"
@@ -133,13 +191,6 @@ const QuizCategories = ({ plan, user }) => {
                     Start Survey
                   </button>
                 </div>
-              </div>
-            ) : (
-              <div
-                key={category.id}
-                className="bg-white border border-primary rounded p-2 text-primary font-roboto hover:bg-secondary transition duration-300"
-              >
-                {category.name}
               </div>
             );
           })}
