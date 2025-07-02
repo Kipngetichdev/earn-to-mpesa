@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../services/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
 import {
   PaintBrushIcon,
   FilmIcon,
@@ -19,22 +17,30 @@ import {
   LightBulbIcon,
   ComputerDesktopIcon,
   BeakerIcon,
+  LockClosedIcon,
 } from '@heroicons/react/24/outline';
+import UpgradeAccount from './UpgradeAccount';
 
-const QuizCategories = ({ plan, user }) => {
+const QuizCategories = ({ plan, accessPlan, user }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTier, setSelectedTier] = useState('');
+
+  // Log props for debugging
+  console.log('QuizCategories props:', { plan, accessPlan });
+
+  // Fallback to 'free' if accessPlan is undefined
+  const effectivePlan = accessPlan || 'free';
 
   // Map icons to Free, Standard, and Premium tier categories (sorted)
   const iconMap = {
-    // Free tier (indices 0–4)
     'Art': PaintBrushIcon,
     'Entertainment: Books': BookOpenIcon,
     'Entertainment: Cartoon & Animations': TvIcon,
     'Entertainment: Comics': BookOpenIcon,
     'Entertainment: Film': FilmIcon,
-    // Standard tier (indices 5–14)
     'Entertainment: Japanese Anime & Manga': AnimeIcon,
     'Entertainment: Music': MusicalNoteIcon,
     'Entertainment: Musicals & Theatres': SpeakerWaveIcon,
@@ -45,7 +51,6 @@ const QuizCategories = ({ plan, user }) => {
     'History': BuildingLibraryIcon,
     'Mythology': SparklesIcon,
     'Politics': StarIcon,
-    // Premium tier (indices 15–19)
     'Science: Computers': ComputerDesktopIcon,
     'Science: Gadgets': ComputerDesktopIcon,
     'Science: Mathematics': BeakerIcon,
@@ -128,6 +133,7 @@ const QuizCategories = ({ plan, user }) => {
           ...category,
           duration,
           reward: rewards[category.id] || `KSh 4.00`, // Fallback reward
+          tier: 'free',
         }));
       } else if (plan === 'standard') {
         const { duration, rewards } = getTierMetadata('standard', standardCategories);
@@ -135,6 +141,7 @@ const QuizCategories = ({ plan, user }) => {
           ...category,
           duration,
           reward: rewards[category.id] || `KSh 80.00`, // Fallback reward
+          tier: 'standard',
         }));
       } else {
         const { duration, rewards } = getTierMetadata('premium', premiumCategories);
@@ -142,19 +149,31 @@ const QuizCategories = ({ plan, user }) => {
           ...category,
           duration,
           reward: rewards[category.id] || `KSh 200.00`, // Fallback reward
+          tier: 'premium',
         }));
       }
       
       setCategories(selectedCategories);
-      
-      // Update Firestore with selected plan
-      if (user) {
-        await updateDoc(doc(db, 'users', user.uid), { plan });
-      }
+      console.log('Fetched categories:', selectedCategories); // Debug categories
     } catch (err) {
       setError('Failed to fetch categories.');
+      console.error('Fetch categories error:', err);
     }
     setLoading(false);
+  };
+
+  // Handle Start Survey button click
+  const handleStartSurvey = (categoryTier) => {
+    console.log('handleStartSurvey:', { effectivePlan, categoryTier, isModalOpen }); // Debug
+    if (effectivePlan === 'free' && (categoryTier === 'standard' || categoryTier === 'premium')) {
+      setSelectedTier(categoryTier);
+      setIsModalOpen(true);
+      console.log('Opening modal for tier:', categoryTier); // Debug
+    } else if (effectivePlan === 'free' && categoryTier === 'free') {
+      alert('Start Survey functionality coming soon!');
+    }
+    // No action for plan === 'standard' and categoryTier === 'standard',
+    // or plan === 'premium' and categoryTier === 'standard' or 'premium'
   };
 
   useEffect(() => {
@@ -185,10 +204,17 @@ const QuizCategories = ({ plan, user }) => {
                 <div className="flex flex-col w-2/3 pl-4">
                   <p className="text-lg font-bold text-primary">{category.name}</p>
                   <button
-                    className="mt-2 bg-highlight text-white px-4 py-1 rounded hover:bg-accent font-roboto transition duration-300"
-                    onClick={() => alert('Start Survey functionality coming soon!')}
+                    className="mt-2 bg-highlight text-white px-4 py-1 rounded hover:bg-accent font-roboto transition duration-300 flex items-center justify-center"
+                    onClick={() => handleStartSurvey(category.tier)}
                   >
-                    Start Survey
+                    {category.tier === 'standard' || category.tier === 'premium' ? (
+                      <>
+                        <LockClosedIcon className="h-4 w-4 mr-2" />
+                        Start Survey
+                      </>
+                    ) : (
+                      'Start Survey'
+                    )}
                   </button>
                 </div>
               </div>
@@ -198,6 +224,14 @@ const QuizCategories = ({ plan, user }) => {
       ) : (
         <p className="text-primary font-roboto">No categories available.</p>
       )}
+      <UpgradeAccount
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          console.log('Modal closed'); // Debug
+        }}
+        tier={selectedTier}
+      />
     </div>
   );
 };

@@ -43,6 +43,10 @@ const App = () => {
             path="/refer"
             element={user ? <Refer completeTask={() => {}} /> : <Navigate to="/signin" />}
           />
+          <Route
+            path="/upgrade"
+            element={user ? <div className="p-4 text-primary font-roboto">Upgrade page coming soon!</div> : <Navigate to="/signin" />}
+          />
         </Routes>
       </div>
       <BottomNav />

@@ -41,6 +41,7 @@ export const signup = async ({ username, email, password, phone }) => {
       history: [],
       createdAt: new Date().toISOString(),
       userCollectedReward: false,
+      plan: 'free', // Added plan field
     });
 
     return { user: { uid: userId, username, email, phone }, error: null };
@@ -94,6 +95,7 @@ export const signin = async ({ identifier, password }) => {
         username: userData.username,
         email: userData.email,
         phone: userData.phone,
+        plan: userData.plan, // Include plan in signin response
       },
       error: null,
     };

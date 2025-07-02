@@ -15,6 +15,9 @@ export const AuthProvider = ({ children }) => {
         if (data) {
           setUser(storedUser);
           setUserData(data);
+          console.log('AuthContext userData:', data); // Debug
+        } else {
+          console.error('AuthContext getUserData error:', error);
         }
         setLoading(false);
       });
@@ -27,7 +30,10 @@ export const AuthProvider = ({ children }) => {
     setUser(user);
     localStorage.setItem('user', JSON.stringify(user));
     getUserData(user.uid).then(({ data }) => {
-      if (data) setUserData(data);
+      if (data) {
+        setUserData(data);
+        console.log('AuthContext login userData:', data); // Debug
+      }
     });
   };
 
