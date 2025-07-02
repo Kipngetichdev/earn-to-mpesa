@@ -19,6 +19,9 @@ import {
   BeakerIcon,
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
+import { useNavigate } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import UpgradeAccount from './UpgradeAccount';
 
 const QuizCategories = ({ plan, accessPlan, user }) => {
@@ -27,9 +30,13 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
   const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [disabledCategories, setDisabledCategories] = useState({});
+  const navigate = useNavigate();
 
   // Log props for debugging
-  console.log('QuizCategories props:', { plan, accessPlan });
+  console.log('QuizCategories props:', { plan, accessPlan, user });
 
   // Fallback to 'free' if accessPlan is undefined
   const effectivePlan = accessPlan || 'free';
@@ -132,7 +139,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
         selectedCategories = shuffleArray(freeCategories).map(category => ({
           ...category,
           duration,
-          reward: rewards[category.id] || `KSh 4.00`, // Fallback reward
+          reward: rewards[category.id] || `KSh 4.00`,
           tier: 'free',
         }));
       } else if (plan === 'standard') {
@@ -140,7 +147,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
         selectedCategories = shuffleArray(standardCategories).map(category => ({
           ...category,
           duration,
-          reward: rewards[category.id] || `KSh 80.00`, // Fallback reward
+          reward: rewards[category.id] || `KSh 80.00`,
           tier: 'standard',
         }));
       } else {
@@ -148,7 +155,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
         selectedCategories = shuffleArray(premiumCategories).map(category => ({
           ...category,
           duration,
-          reward: rewards[category.id] || `KSh 200.00`, // Fallback reward
+          reward: rewards[category.id] || `KSh 200.00`,
           tier: 'premium',
         }));
       }
@@ -162,22 +169,70 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
     setLoading(false);
   };
 
-  // Handle Start Survey button click
-  const handleStartSurvey = (categoryTier) => {
-    console.log('handleStartSurvey:', { effectivePlan, categoryTier, isModalOpen }); // Debug
-    if (effectivePlan === 'free' && (categoryTier === 'standard' || categoryTier === 'premium')) {
-      setSelectedTier(categoryTier);
-      setIsModalOpen(true);
-      console.log('Opening modal for tier:', categoryTier); // Debug
-    } else if (effectivePlan === 'free' && categoryTier === 'free') {
-      alert('Start Survey functionality coming soon!');
+  // Fetch user history to determine disabled categories
+  const fetchUserHistory = async () => {
+    if (user) {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const history = userDoc.data().history || [];
+          const now = new Date();
+          const disabled = {};
+          history.forEach(({ categoryId, completedAt }) => {
+            if (completedAt) {
+              const completedTime = completedAt.toDate();
+              const diffMinutes = (now - completedTime) / (1000 * 60);
+              if (diffMinutes < 120) { // 2 hours = 120 minutes
+                disabled[categoryId] = true;
+              }
+            }
+          });
+          setDisabledCategories(disabled);
+          console.log('Disabled categories:', disabled); // Debug
+        }
+      } catch (err) {
+        console.error('Fetch user history error:', err);
+      }
     }
-    // No action for plan === 'standard' and categoryTier === 'standard',
-    // or plan === 'premium' and categoryTier === 'standard' or 'premium'
+  };
+
+  // Handle Start Survey button click
+  const handleStartSurvey = (category) => {
+    console.log('handleStartSurvey:', { effectivePlan, categoryTier: category.tier, isModalOpen }); // Debug
+    // Access logic: 
+    // - Free plan: only Free categories accessible
+    // - Standard plan: Free and Standard categories accessible
+    // - Premium plan: Free, Standard, and Premium categories accessible
+    const isAccessible = 
+      effectivePlan === 'premium' ||
+      (effectivePlan === 'standard' && (category.tier === 'free' || category.tier === 'standard')) ||
+      (effectivePlan === 'free' && category.tier === 'free');
+
+    if (!isAccessible) {
+      setSelectedTier(category.tier);
+      setIsModalOpen(true);
+      console.log('Opening upgrade modal for tier:', category.tier); // Debug
+    } else {
+      setSelectedCategory(category);
+      setShowModal(true);
+      console.log('Opening instruction modal for category:', category.name); // Debug
+    }
+  };
+
+  // Handle Continue button in instruction modal
+  const handleContinue = () => {
+    if (selectedCategory) {
+      navigate(`/tasks/${selectedCategory.id}`);
+      setShowModal(false);
+      console.log('Navigating to tasks:', selectedCategory.id); // Debug
+    }
   };
 
   useEffect(() => {
     fetchCategories(plan);
+    if (user) {
+      fetchUserHistory();
+    }
   }, [plan, user]);
 
   return (
@@ -191,6 +246,13 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
         <div className="mb-4 overflow-y-auto space-y-2">
           {categories.map((category) => {
             const Icon = iconMap[category.name] || UserGroupIcon; // Fallback icon
+            // Show lock icon if category is not accessible
+            const showLockIcon = 
+              (effectivePlan === 'free' && (category.tier === 'standard' || category.tier === 'premium')) ||
+              (effectivePlan === 'standard' && category.tier === 'premium');
+            // Check if category is disabled (within 2 hours of completion)
+            const isDisabled = disabledCategories[category.id];
+            console.log('Category:', category.name, 'Tier:', category.tier, 'Show lock:', showLockIcon, 'Disabled:', isDisabled); // Debug
             return (
               <div
                 key={category.id}
@@ -204,17 +266,16 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
                 <div className="flex flex-col w-2/3 pl-4">
                   <p className="text-lg font-bold text-primary">{category.name}</p>
                   <button
-                    className="mt-2 bg-highlight text-white px-4 py-1 rounded hover:bg-accent font-roboto transition duration-300 flex items-center justify-center"
-                    onClick={() => handleStartSurvey(category.tier)}
+                    className={`mt-2 px-4 py-1 rounded font-roboto transition duration-300 flex items-center justify-center ${
+                      isDisabled
+                        ? 'bg-gray-400 text-white cursor-not-allowed'
+                        : 'bg-highlight text-white hover:bg-accent'
+                    }`}
+                    onClick={() => handleStartSurvey(category)}
+                    disabled={isDisabled}
                   >
-                    {category.tier === 'standard' || category.tier === 'premium' ? (
-                      <>
-                        <LockClosedIcon className="h-4 w-4 mr-2" />
-                        Start Survey
-                      </>
-                    ) : (
-                      'Start Survey'
-                    )}
+                    {showLockIcon && !isDisabled && <LockClosedIcon className="h-4 w-4 mr-2" />}
+                    Start Survey
                   </button>
                 </div>
               </div>
@@ -224,11 +285,41 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
       ) : (
         <p className="text-primary font-roboto">No categories available.</p>
       )}
+      {/* Instruction Modal */}
+      {showModal && selectedCategory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg">
+            <h2 className="text-lg font-bold text-primary font-roboto mb-4">
+              {selectedCategory.name} Quiz
+            </h2>
+            <p className="text-primary font-roboto mb-4">
+              Answer questions in the {selectedCategory.name} quiz. Complete to earn {selectedCategory.reward} in {selectedCategory.duration}!
+            </p>
+            <div className="flex justify-center gap-4">
+              <button
+                className="bg-highlight text-white px-4 py-2 rounded hover:bg-accent font-roboto transition duration-300"
+                onClick={handleContinue}
+              >
+                Continue
+              </button>
+              <button
+                className="bg-white border border-primary text-primary px-4 py-2 rounded hover:bg-secondary font-roboto transition duration-300"
+                onClick={() => {
+                  setShowModal(false);
+                  console.log('Instruction modal closed'); // Debug
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <UpgradeAccount
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
-          console.log('Modal closed'); // Debug
+          console.log('Upgrade modal closed'); // Debug
         }}
         tier={selectedTier}
         user={user}

@@ -1,9 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/solid';
-import QuizCategories from '../components/QuizCategories';
-import UpgradeAccount from '../components/UpgradeAccount';
-import surveyImage from '../assets/survey.png';
 import {
   PaintBrushIcon,
   FilmIcon,
@@ -24,6 +21,12 @@ import {
   BeakerIcon,
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
+import { useNavigate } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import QuizCategories from '../components/QuizCategories';
+import UpgradeAccount from '../components/UpgradeAccount';
+import surveyImage from '../assets/survey.png';
 
 const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
   const [categories, setCategories] = useState([]);
@@ -31,6 +34,10 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
   const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [disabledCategories, setDisabledCategories] = useState({});
+  const navigate = useNavigate();
 
   // Log props for debugging
   console.log('BottomSheet props:', { accessPlan });
@@ -165,25 +172,73 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
     setLoading(false);
   };
 
-  // Handle Start Survey button click
-  const handleStartSurvey = (categoryTier) => {
-    console.log('BottomSheet handleStartSurvey:', { effectivePlan, categoryTier, isModalOpen }); // Debug
-    if (effectivePlan === 'free' && (categoryTier === 'standard' || categoryTier === 'premium')) {
-      setSelectedTier(categoryTier);
-      setIsModalOpen(true);
-      console.log('BottomSheet opening modal for tier:', categoryTier); // Debug
-    } else if (effectivePlan === 'free' && categoryTier === 'free') {
-      alert('Start Survey functionality coming soon!');
+  // Fetch user history to determine disabled categories
+  const fetchUserHistory = async () => {
+    if (user) {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const history = userDoc.data().history || [];
+          const now = new Date();
+          const disabled = {};
+          history.forEach(({ categoryId, completedAt }) => {
+            if (completedAt) {
+              const completedTime = completedAt.toDate();
+              const diffMinutes = (now - completedTime) / (1000 * 60);
+              if (diffMinutes < 120) { // 2 hours = 120 minutes
+                disabled[categoryId] = true;
+              }
+            }
+          });
+          setDisabledCategories(disabled);
+          console.log('BottomSheet disabled categories:', disabled); // Debug
+        }
+      } catch (err) {
+        console.error('BottomSheet fetch user history error:', err);
+      }
     }
-    // No action for plan === 'standard' and categoryTier === 'standard',
-    // or plan === 'premium' and categoryTier === 'standard' or 'premium'
+  };
+
+  // Handle Start Survey button click
+  const handleStartSurvey = (category) => {
+    console.log('BottomSheet handleStartSurvey:', { effectivePlan, categoryTier: category.tier, isModalOpen }); // Debug
+    // Access logic: 
+    // - Free plan: only Free categories accessible
+    // - Standard plan: Free and Standard categories accessible
+    // - Premium plan: Free, Standard, and Premium categories accessible
+    const isAccessible = 
+      effectivePlan === 'premium' ||
+      (effectivePlan === 'standard' && (category.tier === 'free' || category.tier === 'standard')) ||
+      (effectivePlan === 'free' && category.tier === 'free');
+
+    if (!isAccessible) {
+      setSelectedTier(category.tier);
+      setIsModalOpen(true);
+      console.log('BottomSheet opening upgrade modal for tier:', category.tier); // Debug
+    } else {
+      setSelectedCategory(category);
+      setShowModal(true);
+      console.log('BottomSheet opening instruction modal for category:', category.name); // Debug
+    }
+  };
+
+  // Handle Continue button in instruction modal
+  const handleContinue = () => {
+    if (selectedCategory) {
+      navigate(`/tasks/${selectedCategory.id}`);
+      setShowModal(false);
+      console.log('BottomSheet navigating to tasks:', selectedCategory.id); // Debug
+    }
   };
 
   useEffect(() => {
     if (isOpen) {
       fetchCategories();
+      if (user) {
+        fetchUserHistory();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
@@ -192,7 +247,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50" onClick={onClose}></div>
       <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-lg max-w-md mx-auto p-6 max-h-[80vh] overflow-y-auto z-50 animate-slide-up">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-bold text-primary font-roboto">All Survey Categories</h3>
+          <h4 className="text-lg font-bold text-primary font-roboto">All Survey Categories</h4>
           <button onClick={onClose}>
             <XMarkIcon className="h-6 w-6 text-primary" />
           </button>
@@ -212,6 +267,13 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
                   .filter((category) => category.tier === tier)
                   .map((category) => {
                     const Icon = iconMap[category.name] || UserGroupIcon;
+                    // Show lock icon if category is not accessible
+                    const showLockIcon = 
+                      (effectivePlan === 'free' && (category.tier === 'standard' || category.tier === 'premium')) ||
+                      (effectivePlan === 'standard' && category.tier === 'premium');
+                    // Check if category is disabled
+                    const isDisabled = disabledCategories[category.id];
+                    console.log('BottomSheet Category:', category.name, 'Tier:', category.tier, 'Show lock:', showLockIcon, 'Disabled:', isDisabled); // Debug
                     return (
                       <div
                         key={category.id}
@@ -225,17 +287,16 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
                         <div className="flex flex-col w-2/3 pl-4">
                           <p className="text-lg font-bold text-primary">{category.name}</p>
                           <button
-                            className="mt-2 bg-highlight text-white px-4 py-1 rounded hover:bg-accent font-roboto transition duration-300 flex items-center justify-center"
-                            onClick={() => handleStartSurvey(category.tier)}
+                            className={`mt-2 px-4 py-1 rounded font-roboto transition duration-300 flex items-center justify-center ${
+                              isDisabled
+                                ? 'bg-gray-400 text-white cursor-not-allowed'
+                                : 'bg-highlight text-white hover:bg-accent'
+                            }`}
+                            onClick={() => handleStartSurvey(category)}
+                            disabled={isDisabled}
                           >
-                            {category.tier === 'standard' || category.tier === 'premium' ? (
-                              <>
-                                <LockClosedIcon className="h-4 w-4 mr-2" />
-                                Start Survey
-                              </>
-                            ) : (
-                              'Start Survey'
-                            )}
+                            {showLockIcon && !isDisabled && <LockClosedIcon className="h-4 w-4 mr-2" />}
+                            Start Survey
                           </button>
                         </div>
                       </div>
@@ -247,11 +308,41 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
         ) : (
           <p className="text-primary font-roboto">No categories available.</p>
         )}
+        {/* Instruction Modal */}
+        {showModal && selectedCategory && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg">
+              <h2 className="text-lg font-bold text-primary font-roboto mb-4">
+                {selectedCategory.name} Quiz
+              </h2>
+              <p className="text-primary font-roboto mb-4">
+                Answer questions in the {selectedCategory.name} quiz. Complete to earn {selectedCategory.reward} in {selectedCategory.duration}!
+              </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  className="bg-highlight text-white px-4 py-2 rounded hover:bg-accent font-roboto transition duration-300"
+                  onClick={handleContinue}
+                >
+                  Continue
+                </button>
+                <button
+                  className="bg-white border border-primary text-primary px-4 py-2 rounded hover:bg-secondary font-roboto transition duration-300"
+                  onClick={() => {
+                    setShowModal(false);
+                    console.log('BottomSheet instruction modal closed'); // Debug
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <UpgradeAccount
           isOpen={isModalOpen}
           onClose={() => {
             setIsModalOpen(false);
-            console.log('BottomSheet modal closed'); // Debug
+            console.log('BottomSheet upgrade modal closed'); // Debug
           }}
           tier={selectedTier}
           user={user}
