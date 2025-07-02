@@ -254,6 +254,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
             console.log('BottomSheet modal closed'); // Debug
           }}
           tier={selectedTier}
+          user={user}
         />
       </div>
       <style jsx>{`

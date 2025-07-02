@@ -154,7 +154,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
       }
       
       setCategories(selectedCategories);
-      console.log('Fetched categories:', selectedCategories); // Debug categories
+      console.log('Fetched categories:', selectedCategories); // Debug
     } catch (err) {
       setError('Failed to fetch categories.');
       console.error('Fetch categories error:', err);
@@ -231,6 +231,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
           console.log('Modal closed'); // Debug
         }}
         tier={selectedTier}
+        user={user}
       />
     </div>
   );
