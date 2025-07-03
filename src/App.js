@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import BottomNav from './components/BottomNav';
 import Reward from './components/Reward';
+import Tasking from './components/Tasking';
 import Landing from './welcome/Landing';
 import Signup from './welcome/Signup';
 import Signin from './welcome/Signin';
@@ -34,6 +35,10 @@ const App = () => {
           <Route
             path="/tasks"
             element={user ? <Tasks completeTask={() => {}} /> : <Navigate to="/signin" />}
+          />
+          <Route
+            path="/tasks/:categoryId"
+            element={user ? <Tasking /> : <Navigate to="/signin" />}
           />
           <Route
             path="/earnings"
