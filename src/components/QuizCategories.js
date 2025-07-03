@@ -274,6 +274,9 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
                     {showLockIcon && !isDisabled && <LockClosedIcon className="h-4 w-4 mr-2" />}
                     Start Survey
                   </button>
+                  {isDisabled && (
+                    <p className="text-sm text-gray-500 font-roboto mt-1">Available again in 2Hrs</p>
+                  )}
                 </div>
               </div>
             );
