@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { useNavigate } from 'react-router-dom';
 import {
   PaintBrushIcon,
   FilmIcon,
@@ -19,9 +22,6 @@ import {
   BeakerIcon,
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
-import { useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import UpgradeAccount from './UpgradeAccount';
 
 const QuizCategories = ({ plan, accessPlan, user }) => {
@@ -41,7 +41,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
   // Fallback to 'free' if accessPlan is undefined
   const effectivePlan = accessPlan || 'free';
 
-  // Map icons to Free, Standard, and Premium tier categories (sorted)
+  // Map icons to categories
   const iconMap = {
     'Art': PaintBrushIcon,
     'Entertainment: Books': BookOpenIcon,
@@ -70,13 +70,6 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
     const range = tier === 'free' ? [1.5, 2] : tier === 'standard' ? [2, 3] : [3, 4];
     const duration = (Math.random() * (range[1] - range[0]) + range[0]).toFixed(1);
     return `${duration} min`;
-  };
-
-  // Generate random reward for Free (KSh 4–8), Standard (KSh 80–170), or Premium (KSh 200–350)
-  const getRandomReward = (tier) => {
-    const range = tier === 'free' ? [4, 8] : tier === 'standard' ? [80, 170] : [200, 350];
-    const reward = (Math.random() * (range[1] - range[0]) + range[0]).toFixed(2);
-    return `KSh ${reward}`;
   };
 
   // Generate unique rewards for Free, Standard, or Premium tier categories
@@ -119,52 +112,55 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
     return shuffled;
   };
 
-  // Fetch categories and assign fixed sets per tier
-  const fetchCategories = async (plan) => {
+  // Fetch categories based on selected plan
+  const fetchCategories = async () => {
     setLoading(true);
     setError('');
     try {
       const response = await fetch('https://opentdb.com/api_category.php');
       const data = await response.json();
       const allCategories = data.trivia_categories.sort((a, b) => a.name.localeCompare(b.name));
-      
+
       // Define fixed category sets for each tier
       const freeCategories = allCategories.slice(0, 5); // First 5
       const standardCategories = allCategories.slice(5, 15); // Next 10
       const premiumCategories = allCategories.slice(15, 20); // Next 5
-      
-      let selectedCategories;
+
+      // Process categories based on selected plan
+      let selectedCategories = [];
+      let metadata;
+
       if (plan === 'free') {
-        const { duration, rewards } = getTierMetadata('free', freeCategories);
+        metadata = getTierMetadata('free', freeCategories);
         selectedCategories = shuffleArray(freeCategories).map(category => ({
           ...category,
-          duration,
-          reward: rewards[category.id] || `KSh 4.00`,
+          duration: metadata.duration,
+          reward: metadata.rewards[category.id] || `KSh 4.00`,
           tier: 'free',
         }));
       } else if (plan === 'standard') {
-        const { duration, rewards } = getTierMetadata('standard', standardCategories);
+        metadata = getTierMetadata('standard', standardCategories);
         selectedCategories = shuffleArray(standardCategories).map(category => ({
           ...category,
-          duration,
-          reward: rewards[category.id] || `KSh 80.00`,
+          duration: metadata.duration,
+          reward: metadata.rewards[category.id] || `KSh 80.00`,
           tier: 'standard',
         }));
-      } else {
-        const { duration, rewards } = getTierMetadata('premium', premiumCategories);
+      } else if (plan === 'premium') {
+        metadata = getTierMetadata('premium', premiumCategories);
         selectedCategories = shuffleArray(premiumCategories).map(category => ({
           ...category,
-          duration,
-          reward: rewards[category.id] || `KSh 200.00`,
+          duration: metadata.duration,
+          reward: metadata.rewards[category.id] || `KSh 200.00`,
           tier: 'premium',
         }));
       }
-      
+
       setCategories(selectedCategories);
-      console.log('Fetched categories:', selectedCategories); // Debug
+      console.log('QuizCategories fetched categories:', selectedCategories); // Debug
     } catch (err) {
       setError('Failed to fetch categories.');
-      console.error('Fetch categories error:', err);
+      console.error('QuizCategories fetch categories error:', err);
     }
     setLoading(false);
   };
@@ -180,7 +176,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
           const disabled = {};
           history.forEach(({ categoryId, completedAt }) => {
             if (completedAt) {
-              const completedTime = completedAt.toDate();
+              const completedTime = new Date(completedAt); // Parse ISO string
               const diffMinutes = (now - completedTime) / (1000 * 60);
               if (diffMinutes < 120) { // 2 hours = 120 minutes
                 disabled[categoryId] = true;
@@ -188,22 +184,22 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
             }
           });
           setDisabledCategories(disabled);
-          console.log('Disabled categories:', disabled); // Debug
+          console.log('QuizCategories disabled categories:', disabled); // Debug
         }
       } catch (err) {
-        console.error('Fetch user history error:', err);
+        console.error('QuizCategories fetch user history error:', err);
       }
     }
   };
 
   // Handle Start Survey button click
   const handleStartSurvey = (category) => {
-    console.log('handleStartSurvey:', { effectivePlan, categoryTier: category.tier, isModalOpen }); // Debug
-    // Access logic: 
+    console.log('QuizCategories handleStartSurvey:', { effectivePlan, categoryTier: category.tier }); // Debug
+    // Access logic:
     // - Free plan: only Free categories accessible
     // - Standard plan: Free and Standard categories accessible
     // - Premium plan: Free, Standard, and Premium categories accessible
-    const isAccessible = 
+    const isAccessible =
       effectivePlan === 'premium' ||
       (effectivePlan === 'standard' && (category.tier === 'free' || category.tier === 'standard')) ||
       (effectivePlan === 'free' && category.tier === 'free');
@@ -211,25 +207,26 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
     if (!isAccessible) {
       setSelectedTier(category.tier);
       setIsModalOpen(true);
-      console.log('Opening upgrade modal for tier:', category.tier); // Debug
+      console.log('QuizCategories opening upgrade modal for tier:', category.tier); // Debug
     } else {
       setSelectedCategory(category);
       setShowModal(true);
-      console.log('Opening instruction modal for category:', category.name); // Debug
+      console.log('QuizCategories opening instruction modal for category:', category.name); // Debug
     }
   };
 
   // Handle Continue button in instruction modal
   const handleContinue = () => {
     if (selectedCategory) {
-      navigate(`/tasks/${selectedCategory.id}`);
+      localStorage.setItem(`${selectedCategory.id}_reward`, selectedCategory.reward);
+      navigate(`/home/${selectedCategory.id}`);
       setShowModal(false);
-      console.log('Navigating to tasks:', selectedCategory.id); // Debug
+      console.log('QuizCategories navigating to tasks:', selectedCategory.id); // Debug
     }
   };
 
   useEffect(() => {
-    fetchCategories(plan);
+    fetchCategories();
     if (user) {
       fetchUserHistory();
     }
@@ -245,14 +242,14 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
       ) : categories.length > 0 ? (
         <div className="mb-4 overflow-y-auto space-y-2">
           {categories.map((category) => {
-            const Icon = iconMap[category.name] || UserGroupIcon; // Fallback icon
+            const Icon = iconMap[category.name] || UserGroupIcon;
             // Show lock icon if category is not accessible
-            const showLockIcon = 
+            const showLockIcon =
               (effectivePlan === 'free' && (category.tier === 'standard' || category.tier === 'premium')) ||
               (effectivePlan === 'standard' && category.tier === 'premium');
-            // Check if category is disabled (within 2 hours of completion)
+            // Check if category is disabled
             const isDisabled = disabledCategories[category.id];
-            console.log('Category:', category.name, 'Tier:', category.tier, 'Show lock:', showLockIcon, 'Disabled:', isDisabled); // Debug
+            console.log('QuizCategories Category:', category.name, 'Tier:', category.tier, 'Show lock:', showLockIcon, 'Disabled:', isDisabled); // Debug
             return (
               <div
                 key={category.id}
@@ -306,7 +303,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
                 className="bg-white border border-primary text-primary px-4 py-2 rounded hover:bg-secondary font-roboto transition duration-300"
                 onClick={() => {
                   setShowModal(false);
-                  console.log('Instruction modal closed'); // Debug
+                  console.log('QuizCategories instruction modal closed'); // Debug
                 }}
               >
                 Cancel
@@ -319,7 +316,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
-          console.log('Upgrade modal closed'); // Debug
+          console.log('QuizCategories upgrade modal closed'); // Debug
         }}
         tier={selectedTier}
         user={user}

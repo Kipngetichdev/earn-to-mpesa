@@ -22,7 +22,7 @@ import {
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import QuizCategories from '../components/QuizCategories';
 import UpgradeAccount from '../components/UpgradeAccount';
@@ -183,7 +183,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
           const disabled = {};
           history.forEach(({ categoryId, completedAt }) => {
             if (completedAt) {
-              const completedTime = completedAt.toDate();
+              const completedTime = new Date(completedAt); // Parse ISO string
               const diffMinutes = (now - completedTime) / (1000 * 60);
               if (diffMinutes < 120) { // 2 hours = 120 minutes
                 disabled[categoryId] = true;
@@ -365,14 +365,32 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
   );
 };
 
-const Home = ({ earnings }) => {
+const Home = () => {
   const { user, userData } = useContext(AuthContext);
   const [selectedPlan, setSelectedPlan] = useState(userData?.plan || 'free');
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
+  const [earnings, setEarnings] = useState(0);
+
+  // Listen for real-time earnings updates from Firestore
+  useEffect(() => {
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      const unsubscribe = onSnapshot(userRef, (userDoc) => {
+        if (userDoc.exists()) {
+          setEarnings(userDoc.data().earnings || 0);
+          console.log('Home real-time earnings:', userDoc.data().earnings); // Debug
+        }
+      }, (err) => {
+        console.error('Home real-time earnings error:', err);
+      });
+      return () => unsubscribe(); // Cleanup listener
+    }
+  }, [user]);
 
   // Debug userData.plan and selectedPlan
   console.log('Home userData.plan:', userData?.plan);
   console.log('Home selectedPlan:', selectedPlan);
+  console.log('Home earnings:', earnings);
 
   // Get current time in EAT (UTC+3) and greeting with emoji
   const getGreeting = () => {

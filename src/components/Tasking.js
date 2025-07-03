@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { ProgressSpinner } from 'primereact/progressspinner';
+import { AuthContext } from '../context/AuthContext';
+import 'primereact/resources/themes/lara-light-cyan/theme.css';
+import 'primereact/resources/primereact.min.css';
 
 const Tasking = () => {
   const { categoryId } = useParams();
@@ -11,14 +15,18 @@ const Tasking = () => {
   const [answers, setAnswers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const { user } = React.useContext(React.createContext({ user: null })); // Assuming AuthContext
+  const [showScoreModal, setShowScoreModal] = useState(false);
+  const [score, setScore] = useState(0);
+  const [rewardResult, setRewardResult] = useState('');
+  const [isModalLoading, setIsModalLoading] = useState(false);
+  const { user } = React.useContext(AuthContext);
 
   // Fetch questions from OpenTDB
   useEffect(() => {
     const fetchQuestions = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`https://opentdb.com/api.php?amount=5&category=${categoryId}`);
+        const response = await fetch(`https://opentdb.com/api.php?amount=10&category=${categoryId}`);
         const data = await response.json();
         if (data.response_code === 0) {
           const formattedQuestions = data.results.map((q) => ({
@@ -49,18 +57,42 @@ const Tasking = () => {
     console.log('Selected answer:', answer, 'Index:', currentQuestionIndex); // Debug
   };
 
-  // Handle navigation
+  // Handle navigation and submission
   const handleNext = async () => {
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       console.log('Navigated to question:', currentQuestionIndex + 1); // Debug
     } else {
-      // Submit quiz
+      // Calculate score and reward
       try {
-        const score = answers.reduce((acc, answer, i) => 
+        const totalScore = answers.reduce((acc, answer, i) => 
           answer === questions[i].correctAnswer ? acc + 1 : acc, 0);
-        const reward = localStorage.getItem(`${categoryId}_reward`) || 'KSh 4.00'; // Fallback
-        const numericReward = parseFloat(reward.replace('KSh ', ''));
+        const scorePercentage = (totalScore / questions.length) * 100;
+        const baseReward = localStorage.getItem(`${categoryId}_reward`) || 'KSh 4.00';
+        const numericReward = parseFloat(baseReward.replace('KSh ', ''));
+        let finalReward = 0;
+        let rewardTier = '';
+
+        if (scorePercentage < 30) {
+          rewardTier = 'Failed';
+          finalReward = 0;
+        } else if (scorePercentage >= 90) {
+          rewardTier = 'Excellent';
+          finalReward = numericReward;
+        } else if (scorePercentage >= 50) {
+          rewardTier = 'Good';
+          finalReward = numericReward / 2;
+        }
+
+        setScore(totalScore);
+        setRewardResult(`You scored ${totalScore}/${questions.length} (${scorePercentage.toFixed(1)}%). ${rewardTier}! You earned KSh ${finalReward.toFixed(2)}.`);
+        setShowScoreModal(true);
+        setIsModalLoading(true);
+
+        // Simulate 4-second loading
+        setTimeout(() => {
+          setIsModalLoading(false);
+        }, 4000);
 
         if (user) {
           const userRef = doc(db, 'users', user.uid);
@@ -68,20 +100,33 @@ const Tasking = () => {
           const currentEarnings = userDoc.exists() ? userDoc.data().earnings || 0 : 0;
 
           await updateDoc(userRef, {
-            earnings: currentEarnings + numericReward,
+            earnings: currentEarnings + finalReward,
             history: [
               ...(userDoc.exists() ? userDoc.data().history || [] : []),
-              { categoryId, reward, completedAt: serverTimestamp(), score },
+              {
+                categoryId,
+                reward: `KSh ${finalReward.toFixed(2)}`,
+                completedAt: new Date().toISOString(),
+                score: totalScore,
+              },
             ],
           });
-          console.log('Quiz submitted:', { score, reward, categoryId }); // Debug
+          console.log('Quiz submitted:', { score: totalScore, reward: `KSh ${finalReward.toFixed(2)}`, categoryId, rewardTier }); // Debug
+        } else {
+          console.error('No user logged in, skipping Firestore update');
+          setError('Please sign in to save your progress.');
         }
-        navigate('/home');
       } catch (err) {
         setError('Failed to submit quiz.');
         console.error('Submit quiz error:', err);
       }
     }
+  };
+
+  // Handle modal close and navigation to /home
+  const handleCloseModal = () => {
+    setShowScoreModal(false);
+    navigate('/home');
   };
 
   const handleBack = () => {
@@ -143,6 +188,29 @@ const Tasking = () => {
             </button>
           </div>
         </div>
+        {/* Score Modal */}
+        {showScoreModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg">
+              {isModalLoading ? (
+                <div className="flex justify-center items-center">
+                  <ProgressSpinner style={{ width: '50px', height: '50px' }} strokeWidth="8" fill="var(--surface-ground)" animationDuration=".5s" />
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-lg font-bold text-primary font-roboto mb-4">Quiz Results</h2>
+                  <p className="text-primary font-roboto mb-4">{rewardResult}</p>
+                  <button
+                    className="bg-highlight text-white px-4 py-2 rounded hover:bg-accent font-roboto transition duration-300"
+                    onClick={handleCloseModal}
+                  >
+                    OK
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

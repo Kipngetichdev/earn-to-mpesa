@@ -29,7 +29,7 @@ const App = () => {
             element={user ? <Reward /> : <Navigate to="/signin" />}
           />
           <Route
-            path="/home"
+            path="/home/"
             element={user ? <Home earnings={userData?.earnings || 0} /> : <Navigate to="/signin" />}
           />
           <Route
@@ -37,7 +37,7 @@ const App = () => {
             element={user ? <Tasks completeTask={() => {}} /> : <Navigate to="/signin" />}
           />
           <Route
-            path="/tasks/:categoryId"
+            path="/home/:categoryId"
             element={user ? <Tasking /> : <Navigate to="/signin" />}
           />
           <Route
