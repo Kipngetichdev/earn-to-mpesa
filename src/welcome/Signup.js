@@ -6,7 +6,7 @@ import logo from '../assets/logo.png';
 
 const Signup = () => {
   const navigate = useNavigate();
-  const { login } = useContext(AuthContext);
+  const { signin: authSignin } = useContext(AuthContext); // Changed from login to signin
   const [formData, setFormData] = useState({ username: '', email: '', password: '', phone: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -38,14 +38,22 @@ const Signup = () => {
     e.preventDefault();
     if (validate()) {
       setLoading(true);
-      const { user, error } = await signup(formData);
-      setLoading(false);
-      if (user) {
-        login(user);
-        navigate('/reward');
-      } else {
-        setErrors({ form: error || 'Signup failed' });
+      try {
+        const { user, error } = await signup(formData);
+        if (user) {
+          if (typeof authSignin !== 'function') {
+            throw new Error('Authentication context is not properly initialized');
+          }
+          authSignin(formData.username, formData.password); // Call context signin
+          navigate('/reward');
+        } else {
+          setErrors({ form: error || 'Signup failed' });
+        }
+      } catch (err) {
+        console.error('Signup error:', err);
+        setErrors({ form: err.message || 'Signup failed' });
       }
+      setLoading(false);
     }
   };
 

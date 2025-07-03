@@ -6,7 +6,7 @@ import logo from '../assets/logo.png';
 
 const Signin = () => {
   const navigate = useNavigate();
-  const { login } = useContext(AuthContext);
+  const { signin: authSignin } = useContext(AuthContext); // Changed from login to signin
   const [formData, setFormData] = useState({ identifier: '', password: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -37,20 +37,27 @@ const Signin = () => {
     e.preventDefault();
     if (validate()) {
       setLoading(true);
-      const { user, error } = await signin(formData);
-      if (user) {
-        login(user);
-        const { data, error: userDataError } = await getUserData(user.uid);
-        setLoading(false);
-        if (data && !userDataError) {
-          navigate(data.userCollectedReward ? '/home' : '/reward');
+      try {
+        const { user, error } = await signin(formData);
+        if (user) {
+          if (typeof authSignin !== 'function') {
+            throw new Error('Authentication context is not properly initialized');
+          }
+          authSignin(formData.identifier, formData.password); // Call context signin
+          const { data, error: userDataError } = await getUserData(user.uid);
+          if (data && !userDataError) {
+            navigate(data.userCollectedReward ? '/home' : '/reward');
+          } else {
+            setErrors({ form: userDataError || 'Failed to fetch user data' });
+          }
         } else {
-          setErrors({ form: userDataError || 'Failed to fetch user data' });
+          setErrors({ form: error || 'Signin failed' });
         }
-      } else {
-        setLoading(false);
-        setErrors({ form: error || 'Signin failed' });
+      } catch (err) {
+        console.error('Signin error:', err);
+        setErrors({ form: err.message || 'Signin failed' });
       }
+      setLoading(false);
     }
   };
 
