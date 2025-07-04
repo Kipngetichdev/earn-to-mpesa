@@ -97,15 +97,15 @@ const Tasking = () => {
         if (user) {
           const userRef = doc(db, 'users', user.uid);
           const userDoc = await getDoc(userRef);
-          const currentEarnings = userDoc.exists() ? userDoc.data().earnings || 0 : 0;
+          const currentTaskEarnings = userDoc.exists() ? userDoc.data().taskEarnings || 0 : 0;
 
           await updateDoc(userRef, {
-            earnings: currentEarnings + finalReward,
+            taskEarnings: currentTaskEarnings + finalReward,
             history: [
               ...(userDoc.exists() ? userDoc.data().history || [] : []),
               {
                 categoryId,
-                reward: `KSh ${finalReward.toFixed(2)}`,
+                reward: finalReward,
                 completedAt: new Date().toISOString(),
                 score: totalScore,
               },

@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/solid';
+import { CheckCircleIcon, XMarkIcon, CurrencyDollarIcon } from '@heroicons/react/24/solid';
 import {
   PaintBrushIcon,
   FilmIcon,
@@ -22,7 +22,7 @@ import {
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import QuizCategories from '../components/QuizCategories';
 import UpgradeAccount from '../components/UpgradeAccount';
@@ -369,28 +369,34 @@ const Home = () => {
   const { user, userData } = useContext(AuthContext);
   const [selectedPlan, setSelectedPlan] = useState(userData?.plan || 'free');
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
-  const [earnings, setEarnings] = useState(0);
+  const [withdrawalError, setWithdrawalError] = useState('');
+  const [withdrawalLoading, setWithdrawalLoading] = useState(false);
+  const navigate = useNavigate();
 
-  // Listen for real-time earnings updates from Firestore
+  // Check userCollectedReward and redirect to /reward if false
   useEffect(() => {
-    if (user) {
-      const userRef = doc(db, 'users', user.uid);
-      const unsubscribe = onSnapshot(userRef, (userDoc) => {
-        if (userDoc.exists()) {
-          setEarnings(userDoc.data().earnings || 0);
-          console.log('Home real-time earnings:', userDoc.data().earnings); // Debug
+    const checkUserCollectedReward = async () => {
+      if (user) {
+        try {
+          // Fetch user document to ensure latest userCollectedReward
+          const userRef = doc(db, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
+          const userData = userSnap.exists() ? userSnap.data() : {};
+          console.log('Home userCollectedReward:', userData.userCollectedReward); // Debug
+          if (userData.userCollectedReward === false) {
+            navigate('/reward', { replace: true });
+          }
+        } catch (err) {
+          console.error('Home fetch userCollectedReward error:', err);
         }
-      }, (err) => {
-        console.error('Home real-time earnings error:', err);
-      });
-      return () => unsubscribe(); // Cleanup listener
-    }
-  }, [user]);
+      }
+    };
+    checkUserCollectedReward();
+  }, [user, navigate]);
 
-  // Debug userData.plan and selectedPlan
-  console.log('Home userData.plan:', userData?.plan);
+  // Debug userData and selectedPlan
+  console.log('Home userData:', userData);
   console.log('Home selectedPlan:', selectedPlan);
-  console.log('Home earnings:', earnings);
 
   // Get current time in EAT (UTC+3) and greeting with emoji
   const getGreeting = () => {
@@ -408,32 +414,95 @@ const Home = () => {
     console.log('Selected plan:', plan); // Debug
   };
 
+  const handleWithdrawal = async () => {
+    if (!user) {
+      setWithdrawalError('Please sign in to withdraw.');
+      return;
+    }
+    if (!userData?.phone) {
+      setWithdrawalError('M-Pesa phone number not found.');
+      return;
+    }
+    const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+    if (totalBalance < 10) {
+      setWithdrawalError('Minimum withdrawal amount is KSh 10.');
+      return;
+    }
+
+    setWithdrawalLoading(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        gamingEarnings: 0,
+        taskEarnings: 0,
+        history: arrayUnion({
+          task: 'M-Pesa Withdrawal',
+          reward: -totalBalance,
+          date: new Date().toLocaleString(),
+        }),
+      });
+      alert(`Withdrawal of KSh ${totalBalance.toFixed(2)} to ${userData.phone} initiated successfully!`);
+    } catch (err) {
+      console.error('Withdrawal error:', err);
+      setWithdrawalError('Failed to process withdrawal. Please try again.');
+    }
+    setWithdrawalLoading(false);
+  };
+
+  const handleDeposit = () => {
+    alert('Deposit functionality coming soon!');
+  };
+
   return (
     <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4">
       <div className="w-full max-w-md">
-        <h2 className="text-2xl font-bold text-primary mb-4">
+        <h2 className="text-031 font-bold text-primary mb-4">
           {greetingText} {emoji}
         </h2>
-        <div className="flex items-center bg-primary rounded-lg p-4 shadow-sm">
-          <img
-            src={surveyImage}
-            alt="Survey"
-            className="w-20 h-20 object-cover rounded-md mr-4"
-          />
-          <div className="flex flex-col flex-grow">
-            <p className="text-white font-roboto text-lg">
-              You qualify for multiple surveys
-            </p>
-            <div className="flex items-center mt-2">
-              <p className="text-white font-roboto font-bold">
-                Bal: KSh {earnings.toFixed(2)}
+        <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-2">
+          <div className="flex items-center">
+            <img
+              src={surveyImage}
+              alt="Survey"
+              className="w-20 h-20 object-cover rounded-md mr-4"
+            />
+            <div className="flex flex-col flex-grow">
+              <p className="text-lg font-roboto">
+                You qualify for multiple surveys
               </p>
             </div>
+          </div>
+          <p className="text-lg font-roboto">
+            Gaming Earnings: KSh {userData?.gamingEarnings ? userData.gamingEarnings.toFixed(2) : '0.00'}
+          </p>
+          <p className="text-lg font-roboto">
+            Tasks Earnings: KSh {userData?.taskEarnings ? userData.taskEarnings.toFixed(2) : '0.00'}
+          </p>
+          <p className="text-lg font-bold font-roboto">
+            Total: KSh {((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)).toFixed(2)}
+          </p>
+          {withdrawalError && (
+            <p className="text-red-500 text-sm">{withdrawalError}</p>
+          )}
+          <div className="flex justify-between gap-4 mt-4">
             <button
-              className="mt-4 bg-highlight text-white px-4 py-2 rounded hover:bg-accent font-roboto transition duration-300"
-              onClick={() => alert('Withdraw functionality coming soon!')}
+              onClick={handleWithdrawal}
+              disabled={withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10}
+              className={`flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
+                withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:bg-accent hover:text-white'
+              }`}
             >
-              Withdraw
+              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+              {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
+            </button>
+            <button
+              onClick={handleDeposit}
+              className="flex-1 bg-gray-400 text-white px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center opacity-50 cursor-not-allowed"
+            >
+              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+              Deposit
             </button>
           </div>
         </div>

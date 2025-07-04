@@ -1,16 +1,180 @@
-import React from 'react';
-import SurveyTask from '../components/SurveyTask';
-import VideoTask from '../components/VideoTask';
-import SpinToWin from '../components/SpinToWin';
+import React, { useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Wheel } from 'react-custom-roulette';
+import { AuthContext } from '../context/AuthContext';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { CurrencyDollarIcon } from '@heroicons/react/24/solid';
 
-const Tasks = ({ completeTask }) => {
+const Tasks = () => {
+  const navigate = useNavigate();
+  const { user, userData } = useContext(AuthContext);
+  const [mustSpin, setMustSpin] = useState(false);
+  const [prizeNumber, setPrizeNumber] = useState(0);
+  const [reward, setReward] = useState(null);
+  const [withdrawalError, setWithdrawalError] = useState('');
+  const [withdrawalLoading, setWithdrawalLoading] = useState(false);
+
+  const data = [
+    { option: 'KSh 5.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
+    { option: 'KSh 105', style: { backgroundColor: '#FFE3BB', textColor: '#FF4F0F' } },
+    { option: 'KSh 150', style: { backgroundColor: '#FFA673', textColor: 'white' } },
+    { option: 'KSh 255', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
+    { option: 'KSh 280', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
+    { option: 'KSh 320', style: { backgroundColor: '#FFE3BB', textColor: '#FF4F0F' } },
+    { option: 'KSh 375', style: { backgroundColor: '#FFA673', textColor: 'white' } },
+    { option: 'KSh 450', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
+  ];
+
+  const handleSpinClick = () => {
+    if (!mustSpin) {
+      const newPrizeNumber = Math.floor(Math.random() * data.length);
+      setPrizeNumber(newPrizeNumber);
+      setMustSpin(true);
+    }
+  };
+
+  const onStopSpinning = async () => {
+    setMustSpin(false);
+    const winner = data[prizeNumber].option;
+    const rewardValue = parseFloat(winner.replace('KSh ', ''));
+    setReward(rewardValue);
+
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      try {
+        await updateDoc(userRef, {
+          gamingEarnings: (userData?.gamingEarnings || 0) + rewardValue,
+          history: arrayUnion({
+            task: `Free Spin Reward (Welcome ${userData?.username || 'User'})`,
+            reward: rewardValue,
+            date: new Date().toLocaleString(),
+          }),
+          userCollectedReward: true,
+        });
+      } catch (err) {
+        console.error('Spin to Win error:', err);
+        alert('Failed to save reward. Please try again.');
+      }
+    }
+
+    setTimeout(() => {
+      navigate('/home');
+    }, 3000);
+  };
+
+  const handleWithdrawal = async () => {
+    if (!user) {
+      setWithdrawalError('Please sign in to withdraw.');
+      return;
+    }
+    if (!userData?.phone) {
+      setWithdrawalError('M-Pesa phone number not found.');
+      return;
+    }
+    const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+    if (totalBalance < 10) {
+      setWithdrawalError('Minimum withdrawal amount is KSh 10.');
+      return;
+    }
+
+    setWithdrawalLoading(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        gamingEarnings: 0,
+        taskEarnings: 0,
+        history: arrayUnion({
+          task: 'M-Pesa Withdrawal',
+          reward: -totalBalance,
+          date: new Date().toLocaleString(),
+        }),
+      });
+      alert(`Withdrawal of KSh ${totalBalance.toFixed(2)} to ${userData.phone} initiated successfully!`);
+    } catch (err) {
+      console.error('Withdrawal error:', err);
+      setWithdrawalError('Failed to process withdrawal. Please try again.');
+    }
+    setWithdrawalLoading(false);
+  };
+
+  const handleDeposit = () => {
+    alert('Deposit functionality coming soon!');
+  };
+
   return (
-    <div className="min-h-screen bg-secondary font-roboto flex items-center justify-center px-4">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md space-y-6">
-        <h2 className="text-xl font-bold font-roboto text-primary">Tasks</h2>
-        <SurveyTask completeTask={completeTask} />
-        <VideoTask completeTask={completeTask} />
-        <SpinToWin completeTask={completeTask} />
+    <div className="min-h-screen bg-secondary font-roboto flex items-center justify-center py-12 px-4">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md text-center space-y-6">
+        <h2 className="text-2xl font-bold text-primary font-roboto">
+          Welcome, {userData?.username || 'User'}! Spin to Win!
+        </h2>
+        <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-2">
+          <p className="text-lg font-roboto">
+            Gaming: KSh {userData?.gamingEarnings ? userData.gamingEarnings.toFixed(2) : '0.00'}
+          </p>
+          <p className="text-lg font-roboto">
+            Tasks: KSh {userData?.taskEarnings ? userData.taskEarnings.toFixed(2) : '0.00'}
+          </p>
+          <p className="text-lg font-bold font-roboto">
+            Total: KSh {((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)).toFixed(2)}
+          </p>
+        </div>
+        {withdrawalError && (
+          <p className="text-red-500 text-sm">{withdrawalError}</p>
+        )}
+        <div className="mt-6">
+          <Wheel
+            mustStartSpinning={mustSpin}
+            prizeNumber={prizeNumber}
+            data={data}
+            onStopSpinning={onStopSpinning}
+            backgroundColors={['#03A6A1', '#FFE3BB', '#FFA673', '#FF4F0F']}
+            textColors={['white', '#FF4F0F']}
+            outerBorderColor="#03A6A1"
+            outerBorderWidth={5}
+            radiusLineColor="#03A6A1"
+            radiusLineWidth={2}
+            fontFamily="Roboto"
+            fontSize={16}
+            perpendicularText={true}
+            spinDuration={0.6}
+          />
+        </div>
+        {reward && (
+          <p className="text-xl text-highlight font-roboto mt-4">
+            You won KSh {reward.toFixed(2)}!
+          </p>
+        )}
+        <button
+          onClick={handleSpinClick}
+          disabled={mustSpin}
+          className={`mt-6 bg-highlight text-white px-6 py-3 rounded-full font-roboto hover:bg-accent transition duration-300 ${
+            mustSpin ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+        >
+          {mustSpin ? 'Spinning...' : 'Spin Now'}
+        </button>
+        <div className="space-y-4">
+          <button
+            onClick={handleWithdrawal}
+            disabled={withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10}
+            className={`w-full bg-primary text-white px-4 py-3 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
+              withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10
+                ? 'opacity-50 cursor-not-allowed'
+                : 'hover:bg-accent'
+            }`}
+          >
+            <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+            {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
+          </button>
+          <button
+            onClick={handleDeposit}
+            className="w-full bg-gray-400 text-white px-4 py-3 rounded-lg font-roboto transition duration-300 flex items-center justify-center opacity-50 cursor-not-allowed"
+          >
+            <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+            Deposit (Coming Soon)
+          </button>
+        </div>
       </div>
     </div>
   );

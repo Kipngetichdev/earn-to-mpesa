@@ -1,8 +1,8 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wheel } from 'react-custom-roulette';
 import { AuthContext } from '../context/AuthContext';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 const Reward = () => {
@@ -11,6 +11,7 @@ const Reward = () => {
   const [mustSpin, setMustSpin] = useState(false);
   const [prizeNumber, setPrizeNumber] = useState(0);
   const [reward, setReward] = useState(null);
+  const [hasCollectedReward, setHasCollectedReward] = useState(null);
 
   const data = [
     { option: 'KSh 5.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
@@ -23,9 +24,33 @@ const Reward = () => {
     { option: 'KSh 450', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
   ];
 
+  // Check userCollectedReward on mount
+  useEffect(() => {
+    const checkUserCollectedReward = async () => {
+      if (user) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
+          const userData = userSnap.exists() ? userSnap.data() : {};
+          console.log('Reward userCollectedReward:', userData.userCollectedReward); // Debug
+          setHasCollectedReward(userData.userCollectedReward || false);
+          if (userData.userCollectedReward) {
+            navigate('/home', { replace: true });
+          }
+        } catch (err) {
+          console.error('Reward fetch userCollectedReward error:', err);
+          setHasCollectedReward(false); // Assume false if error
+        }
+      }
+    };
+    checkUserCollectedReward();
+  }, [user, navigate]);
+
   const handleSpinClick = () => {
-    if (!mustSpin) {
-      const newPrizeNumber = Math.floor(Math.random() * data.length);
+    if (!mustSpin && !hasCollectedReward) {
+      // Restrict prizeNumber to indices 4, 5, 6, 7 (KSh 280, 320, 375, 450)
+      const validIndices = [4, 5, 6, 7];
+      const newPrizeNumber = validIndices[Math.floor(Math.random() * validIndices.length)];
       setPrizeNumber(newPrizeNumber);
       setMustSpin(true);
     }
@@ -40,7 +65,7 @@ const Reward = () => {
     if (user) {
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
-        earnings: (userData?.earnings || 0) + rewardValue,
+        gamingEarnings: (userData?.gamingEarnings || 0) + rewardValue,
         history: arrayUnion({
           task: `Free Spin Reward (Welcome ${userData?.username || 'User'})`,
           reward: rewardValue,
@@ -48,12 +73,22 @@ const Reward = () => {
         }),
         userCollectedReward: true,
       });
+      setHasCollectedReward(true);
     }
 
     setTimeout(() => {
-      navigate('/home');
+      navigate('/home', { replace: true });
     }, 3000);
   };
+
+  // Show loading state while checking userCollectedReward
+  if (hasCollectedReward === null) {
+    return (
+      <div className="min-h-screen bg-secondary font-roboto flex items-center justify-center py-12 px-4">
+        <p className="text-primary font-roboto">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-secondary font-roboto flex items-center justify-center py-12 px-4">
@@ -89,12 +124,12 @@ const Reward = () => {
         )}
         <button
           onClick={handleSpinClick}
-          disabled={mustSpin}
+          disabled={mustSpin || hasCollectedReward}
           className={`mt-6 bg-highlight text-white px-6 py-3 rounded-full font-roboto hover:bg-accent transition duration-300 ${
-            mustSpin ? 'opacity-50 cursor-not-allowed' : ''
+            mustSpin || hasCollectedReward ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         >
-          {mustSpin ? 'Spinning...' : 'Spin Now'}
+          {mustSpin ? 'Spinning...' : hasCollectedReward ? 'Reward Claimed' : 'Spin Now'}
         </button>
       </div>
     </div>

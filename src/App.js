@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import BottomNav from './components/BottomNav';
 import Reward from './components/Reward';
@@ -14,23 +14,36 @@ import Refer from './pages/Refer';
 
 const App = () => {
   const { user, loading, userData } = useContext(AuthContext);
+  const location = useLocation();
 
   if (loading) return null;
+
+  // Show BottomNav on /home, /tasks, /refer, /earnings routes
+  const showBottomNav = ['/home', '/tasks', '/refer', '/earnings'].includes(location.pathname);
 
   return (
     <div className="min-h-screen bg-secondary font-roboto flex flex-col">
       <div className="flex-grow pb-16"> {/* Padding for BottomNav */}
         <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/signin" element={<Signin />} />
+          <Route
+            path="/"
+            element={user ? <Navigate to="/home" /> : <Landing />}
+          />
+          <Route
+            path="/signup"
+            element={user ? <Navigate to="/reward" /> : <Signup />}
+          />
+          <Route
+            path="/signin"
+            element={user ? <Navigate to="/home" /> : <Signin />}
+          />
           <Route
             path="/reward"
             element={user ? <Reward /> : <Navigate to="/signin" />}
           />
           <Route
-            path="/home/"
-            element={user ? <Home earnings={userData?.earnings || 0} /> : <Navigate to="/signin" />}
+            path="/home"
+            element={user ? <Home /> : <Navigate to="/signin" />}
           />
           <Route
             path="/tasks"
@@ -54,7 +67,7 @@ const App = () => {
           />
         </Routes>
       </div>
-      <BottomNav />
+      {showBottomNav && <BottomNav />}
     </div>
   );
 };
