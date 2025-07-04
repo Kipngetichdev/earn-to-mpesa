@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { CurrencyDollarIcon } from '@heroicons/react/24/solid';
+import surveyImage from '../assets/spin.png';
 
 const Tasks = () => {
   const navigate = useNavigate();
@@ -46,11 +47,10 @@ const Tasks = () => {
         await updateDoc(userRef, {
           gamingEarnings: (userData?.gamingEarnings || 0) + rewardValue,
           history: arrayUnion({
-            task: `Free Spin Reward (Welcome ${userData?.username || 'User'})`,
+            task: `Spin to Win (${userData?.username || 'User'})`,
             reward: rewardValue,
             date: new Date().toLocaleString(),
           }),
-          userCollectedReward: true,
         });
       } catch (err) {
         console.error('Spin to Win error:', err);
@@ -59,7 +59,7 @@ const Tasks = () => {
     }
 
     setTimeout(() => {
-      navigate('/home');
+      navigate('/home', { replace: true });
     }, 3000);
   };
 
@@ -103,25 +103,58 @@ const Tasks = () => {
   };
 
   return (
-    <div className="min-h-screen bg-secondary font-roboto flex items-center justify-center py-12 px-4">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md text-center space-y-6">
-        <h2 className="text-2xl font-bold text-primary font-roboto">
+    <div className=" min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4">
+      <div className="w-full max-w-md">
+        <h5 className="text-left font-bold text-primary font-roboto mb-4">
           Welcome, {userData?.username || 'User'}! Spin to Win!
-        </h2>
+        </h5>
         <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-2">
+          <div className="flex items-center">
+            <img
+              src={surveyImage}
+              alt="Spin to Win"
+              className="w-20 h-20 object-cover rounded-md mr-4"
+            />
+            <div className="flex flex-col flex-grow">
+              <p className="text-lg font-roboto">
+                Spin to Win for a chance to earn up to KSh 10,000!
+              </p>
+            </div>
+          </div>
           <p className="text-lg font-roboto">
-            Gaming: KSh {userData?.gamingEarnings ? userData.gamingEarnings.toFixed(2) : '0.00'}
+            Gaming Earnings: KSh {userData?.gamingEarnings ? userData.gamingEarnings.toFixed(2) : '0.00'}
           </p>
           <p className="text-lg font-roboto">
-            Tasks: KSh {userData?.taskEarnings ? userData.taskEarnings.toFixed(2) : '0.00'}
+            Tasks Earnings: KSh {userData?.taskEarnings ? userData.taskEarnings.toFixed(2) : '0.00'}
           </p>
           <p className="text-lg font-bold font-roboto">
             Total: KSh {((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)).toFixed(2)}
           </p>
+          {withdrawalError && (
+            <p className="text-red-500 text-sm">{withdrawalError}</p>
+          )}
+          <div className="flex justify-between gap-4 mt-4">
+            <button
+              onClick={handleWithdrawal}
+              disabled={withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10}
+              className={`flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
+                withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:bg-accent hover:text-white'
+              }`}
+            >
+              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+              {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
+            </button>
+            <button
+              onClick={handleDeposit}
+              className="flex-1 bg-gray-400 text-white px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center opacity-50 cursor-not-allowed"
+            >
+              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+              Deposit
+            </button>
+          </div>
         </div>
-        {withdrawalError && (
-          <p className="text-red-500 text-sm">{withdrawalError}</p>
-        )}
         <div className="mt-6">
           <Wheel
             mustStartSpinning={mustSpin}
@@ -154,27 +187,6 @@ const Tasks = () => {
         >
           {mustSpin ? 'Spinning...' : 'Spin Now'}
         </button>
-        <div className="space-y-4">
-          <button
-            onClick={handleWithdrawal}
-            disabled={withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10}
-            className={`w-full bg-primary text-white px-4 py-3 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
-              withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10
-                ? 'opacity-50 cursor-not-allowed'
-                : 'hover:bg-accent'
-            }`}
-          >
-            <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-            {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
-          </button>
-          <button
-            onClick={handleDeposit}
-            className="w-full bg-gray-400 text-white px-4 py-3 rounded-lg font-roboto transition duration-300 flex items-center justify-center opacity-50 cursor-not-allowed"
-          >
-            <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-            Deposit (Coming Soon)
-          </button>
-        </div>
       </div>
     </div>
   );
