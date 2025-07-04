@@ -15,6 +15,10 @@ const Tasks = () => {
   const [reward, setReward] = useState(null);
   const [withdrawalError, setWithdrawalError] = useState('');
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
+  const [selectedStake, setSelectedStake] = useState(20); // Default stake: KSh 20
+  const [stakeError, setStakeError] = useState('');
+
+  const stakes = [20, 50, 100, 150, 300];
 
   const data = [
     { option: 'KSh 5.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
@@ -27,8 +31,40 @@ const Tasks = () => {
     { option: 'KSh 450', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
   ];
 
+  const handleStakeSelect = (stake) => {
+    setSelectedStake(stake);
+    setStakeError('');
+  };
+
+  const handleStakeInput = (e) => {
+    const value = e.target.value;
+    if (value === '') {
+      setSelectedStake(20); // Revert to default if input is cleared
+      setStakeError('');
+      return;
+    }
+    const numValue = parseFloat(value);
+    if (isNaN(numValue) || numValue < 10) {
+      setStakeError('Stake must be at least KSh 10.');
+      setSelectedStake(20);
+    } else {
+      setSelectedStake(numValue);
+      setStakeError('');
+    }
+  };
+
   const handleSpinClick = () => {
     if (!mustSpin) {
+      const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+      if (totalBalance < selectedStake) {
+        setStakeError('Insufficient balance to spin with selected stake.');
+        return;
+      }
+      if (selectedStake < 10) {
+        setStakeError('Stake must be at least KSh 10.');
+        return;
+      }
+      setStakeError('');
       const newPrizeNumber = Math.floor(Math.random() * data.length);
       setPrizeNumber(newPrizeNumber);
       setMustSpin(true);
@@ -44,13 +80,27 @@ const Tasks = () => {
     if (user) {
       const userRef = doc(db, 'users', user.uid);
       try {
+        const newGamingEarnings = Math.max(0, (userData?.gamingEarnings || 0) - selectedStake);
+        const newTaskEarnings =
+          newGamingEarnings === 0 && selectedStake > (userData?.gamingEarnings || 0)
+            ? Math.max(0, (userData?.taskEarnings || 0) - (selectedStake - (userData?.gamingEarnings || 0)))
+            : userData?.taskEarnings || 0;
+
         await updateDoc(userRef, {
-          gamingEarnings: (userData?.gamingEarnings || 0) + rewardValue,
-          history: arrayUnion({
-            task: `Spin to Win (${userData?.username || 'User'})`,
-            reward: rewardValue,
-            date: new Date().toLocaleString(),
-          }),
+          gamingEarnings: newGamingEarnings + rewardValue,
+          taskEarnings: newTaskEarnings,
+          history: arrayUnion(
+            {
+              task: `Spin to Win (Stake KSh ${selectedStake}, ${userData?.username || 'User'})`,
+              reward: -selectedStake,
+              date: new Date().toLocaleString(),
+            },
+            {
+              task: `Spin to Win (${userData?.username || 'User'})`,
+              reward: rewardValue,
+              date: new Date().toLocaleString(),
+            }
+          ),
         });
       } catch (err) {
         console.error('Spin to Win error:', err);
@@ -58,9 +108,9 @@ const Tasks = () => {
       }
     }
 
-    setTimeout(() => {
-      navigate('/home', { replace: true });
-    }, 3000);
+    // setTimeout(() => {
+    //   navigate('/home', { replace: true });
+    // }, 3000);
   };
 
   const handleWithdrawal = async () => {
@@ -103,7 +153,7 @@ const Tasks = () => {
   };
 
   return (
-    <div className=" min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4">
+    <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4 pb-20">
       <div className="w-full max-w-md">
         <h5 className="text-left font-bold text-primary font-roboto mb-4">
           Welcome, {userData?.username || 'User'}! Spin to Win!
@@ -155,7 +205,7 @@ const Tasks = () => {
             </button>
           </div>
         </div>
-        <div className="mt-6">
+        <div className="mt-6 relative z-0">
           <Wheel
             mustStartSpinning={mustSpin}
             prizeNumber={prizeNumber}
@@ -178,15 +228,45 @@ const Tasks = () => {
             You won KSh {reward.toFixed(2)}!
           </p>
         )}
-        <button
-          onClick={handleSpinClick}
-          disabled={mustSpin}
-          className={`mt-6 bg-highlight text-white px-6 py-3 rounded-full font-roboto hover:bg-accent transition duration-300 ${
-            mustSpin ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-        >
-          {mustSpin ? 'Spinning...' : 'Spin Now'}
-        </button>
+        {stakeError && (
+          <p className="text-red-500 text-sm mt-2">{stakeError}</p>
+        )}
+        <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-2 mt-4">
+          <p className="text-lg font-bold font-roboto">Choose Stake</p>
+          <p className="text-sm font-roboto">Stake will be deducted from total balance</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {stakes.map((stake) => (
+              <button
+                key={stake}
+                onClick={() => handleStakeSelect(stake)}
+                className={`flex-1 bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 min-w-[60px] ${
+                  selectedStake === stake ? 'bg-accent text-white' : 'hover:bg-accent hover:text-white'
+                }`}
+              >
+                KSh {stake}
+              </button>
+            ))}
+            <input
+              type="number"
+              min="10"
+              step="0.01"
+              placeholder="Custom Stake"
+              onChange={handleStakeInput}
+              className="flex-1 bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 min-w-[60px] focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+          <button
+            onClick={handleSpinClick}
+            disabled={mustSpin || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < selectedStake || selectedStake < 10}
+            className={`mt-4 bg-highlight text-white px-6 py-3 rounded-full font-roboto hover:bg-accent transition duration-300 w-full ${
+              mustSpin || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < selectedStake || selectedStake < 10
+                ? 'opacity-50 cursor-not-allowed'
+                : ''
+            }`}
+          >
+            {mustSpin ? 'Spinning...' : `Spin for KSh ${selectedStake.toFixed(2)}`}
+          </button>
+        </div>
       </div>
     </div>
   );
