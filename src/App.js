@@ -4,6 +4,7 @@ import { AuthContext } from './context/AuthContext';
 import BottomNav from './components/BottomNav';
 import Reward from './components/Reward';
 import Tasking from './components/Tasking';
+import Deposit from './components/Deposit';
 import Landing from './welcome/Landing';
 import Signup from './welcome/Signup';
 import Signin from './welcome/Signin';
@@ -18,8 +19,8 @@ const App = () => {
 
   if (loading) return null;
 
-  // Show BottomNav on /home, /tasks, /refer, /earnings routes
-  const showBottomNav = ['/home', '/tasks', '/refer', '/earnings'].includes(location.pathname);
+  // Show BottomNav on /home, /tasks, /refer, /earnings, /deposit routes
+  const showBottomNav = ['/home', '/tasks', '/refer', '/earnings', '/deposit'].includes(location.pathname);
 
   return (
     <div className="min-h-screen bg-secondary font-roboto flex flex-col">
@@ -60,6 +61,10 @@ const App = () => {
           <Route
             path="/refer"
             element={user ? <Refer completeTask={() => {}} /> : <Navigate to="/signin" />}
+          />
+          <Route
+            path="/deposit"
+            element={user ? <Deposit /> : <Navigate to="/signin" />}
           />
           <Route
             path="/upgrade"

@@ -373,7 +373,7 @@ const Home = () => {
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Check userCollectedReward and redirect to /reward if false
+  // Check userCollectedReward and redirect to /reward自在
   useEffect(() => {
     const checkUserCollectedReward = async () => {
       if (user) {
@@ -450,7 +450,8 @@ const Home = () => {
   };
 
   const handleDeposit = () => {
-    alert('Deposit functionality coming soon!');
+    console.log('Navigating to /deposit from /home');
+    navigate('/deposit', { replace: true, state: { from: '/home' } });
   };
 
   return (
@@ -499,7 +500,7 @@ const Home = () => {
             </button>
             <button
               onClick={handleDeposit}
-              className="flex-1 bg-gray-400 text-white px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center opacity-50 cursor-not-allowed"
+              className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
             >
               <CurrencyDollarIcon className="w-5 h-5 mr-2" />
               Deposit

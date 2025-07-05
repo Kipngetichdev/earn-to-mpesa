@@ -45,8 +45,8 @@ const Tasks = () => {
       return;
     }
     const numValue = parseFloat(value);
-    if (isNaN(numValue) || numValue < 10) {
-      setStakeError('Stake must be at least KSh 10.');
+    if (isNaN(numValue) || numValue < 100) {
+      setStakeError('Stake must be at least KSh 100.');
       setSelectedStake(20);
     } else {
       setSelectedStake(numValue);
@@ -109,9 +109,9 @@ const Tasks = () => {
       }
     }
 
-    setTimeout(() => {
-      navigate('/home', { replace: true });
-    }, 3000);
+    // setTimeout(() => {
+    //   navigate('/home', { replace: true });
+    // }, 3000);
   };
 
   const handleWithdrawal = async () => {
@@ -150,7 +150,8 @@ const Tasks = () => {
   };
 
   const handleDeposit = () => {
-    alert('Deposit functionality coming soon!');
+    console.log('Navigating to /deposit from /tasks');
+    navigate('/deposit', { replace: true, state: { from: '/tasks' } });
   };
 
   const players = usePlayerData();
@@ -201,7 +202,7 @@ const Tasks = () => {
             </button>
             <button
               onClick={handleDeposit}
-              className="flex-1 bg-gray-400 text-white px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center opacity-50 cursor-not-allowed"
+              className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
             >
               <CurrencyDollarIcon className="w-5 h-5 mr-2" />
               Deposit
