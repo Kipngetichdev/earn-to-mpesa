@@ -39,6 +39,8 @@ export const signup = async ({ username, email, password, phone }) => {
       password: hashedPassword,
       gamingEarnings: 0,
       taskEarnings: 0,
+      spinCount: 0, // Initialize spin count
+      isBettingAccountActive: false, // Initialize betting account status
       history: [],
       createdAt: new Date().toISOString(),
       userCollectedReward: false,
@@ -47,6 +49,7 @@ export const signup = async ({ username, email, password, phone }) => {
 
     return { user: { uid: userId, username, email, phone }, error: null };
   } catch (error) {
+    console.error('Signup error:', error);
     return { user: null, error: error.message || 'Signup failed' };
   }
 };
@@ -101,6 +104,7 @@ export const signin = async ({ identifier, password }) => {
       error: null,
     };
   } catch (error) {
+    console.error('Signin error:', error);
     return { user: null, error: error.message || 'Signin failed' };
   }
 };
@@ -117,6 +121,7 @@ export const getUserData = async (userId) => {
     }
     return { data: null, error: 'User not found' };
   } catch (error) {
+    console.error('Get user data error:', error);
     return { data: null, error: error.message };
   }
 };

@@ -1,10 +1,10 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wheel } from 'react-custom-roulette';
 import { AuthContext } from '../context/AuthContext';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, getDoc, runTransaction } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { CurrencyDollarIcon } from '@heroicons/react/24/solid';
+import { CurrencyDollarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid';
 import surveyImage from '../assets/spin.png';
 import { usePlayerData } from '../services/playerData';
 
@@ -18,8 +18,14 @@ const Tasks = () => {
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
   const [selectedStake, setSelectedStake] = useState(20); // Default stake: KSh 20
   const [stakeError, setStakeError] = useState('');
+  const [spinCount, setSpinCount] = useState(0);
+  const [isBettingAccountActive, setIsBettingAccountActive] = useState(false);
+  const [showActivationModal, setShowActivationModal] = useState(false);
+  const [activationError, setActivationError] = useState('');
+  const [activationLoading, setActivationLoading] = useState(false);
+  const [phone, setPhone] = useState(userData?.phone || '');
 
-  const stakes = [20, 50, 100, 150, 300];
+  const stakes = [20, 50, 100, 150, 200, 300];
 
   const data = [
     { option: 'KSh 5.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
@@ -32,6 +38,31 @@ const Tasks = () => {
     { option: 'KSh 450', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
   ];
 
+  // Fetch spinCount and isBettingAccountActive, show modal if needed
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (user) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            setSpinCount(data.spinCount || 0);
+            setIsBettingAccountActive(data.isBettingAccountActive || false);
+            setPhone(data.phone || '');
+            if (data.spinCount >= 3 && !data.isBettingAccountActive) {
+              setShowActivationModal(true);
+            }
+            console.log('Tasks fetched user data:', { spinCount: data.spinCount, isBettingAccountActive: data.isBettingAccountActive });
+          }
+        } catch (err) {
+          console.error('Fetch user data error:', err);
+        }
+      }
+    };
+    fetchUserData();
+  }, [user]);
+
   const handleStakeSelect = (stake) => {
     setSelectedStake(stake);
     setStakeError('');
@@ -40,13 +71,13 @@ const Tasks = () => {
   const handleStakeInput = (e) => {
     const value = e.target.value;
     if (value === '') {
-      setSelectedStake(20); // Revert to default if input is cleared
+      setSelectedStake(20); // Revert to default
       setStakeError('');
       return;
     }
     const numValue = parseFloat(value);
-    if (isNaN(numValue) || numValue < 100) {
-      setStakeError('Stake must be at least KSh 100.');
+    if (isNaN(numValue) || numValue < 20) {
+      setStakeError('Stake must be at least KSh 20.');
       setSelectedStake(20);
     } else {
       setSelectedStake(numValue);
@@ -54,21 +85,57 @@ const Tasks = () => {
     }
   };
 
-  const handleSpinClick = () => {
-    if (!mustSpin) {
-      const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
-      if (totalBalance < selectedStake) {
-        setStakeError('Insufficient balance to spin with selected stake.');
-        return;
-      }
-      if (selectedStake < 10) {
-        setStakeError('Stake must be at least KSh 10.');
-        return;
-      }
-      setStakeError('');
+  const handleSpinClick = async () => {
+    if (mustSpin) return;
+    if (!user) {
+      setStakeError('Please sign in to spin.');
+      return;
+    }
+    const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+    if (totalBalance < selectedStake) {
+      setStakeError('Insufficient balance to spin with selected stake.');
+      return;
+    }
+    if (selectedStake < 20) {
+      setStakeError('Stake must be at least KSh 20.');
+      return;
+    }
+    if (spinCount >= 3 && !isBettingAccountActive) {
+      setShowActivationModal(true);
+      return;
+    }
+
+    setStakeError('');
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await runTransaction(db, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+          throw new Error('User not found');
+        }
+        const userData = userSnap.data();
+        const newGamingEarnings = Math.max(0, (userData.gamingEarnings || 0) - selectedStake);
+        const newTaskEarnings =
+          newGamingEarnings === 0 && selectedStake > (userData.gamingEarnings || 0)
+            ? Math.max(0, (userData.taskEarnings || 0) - (selectedStake - (userData.gamingEarnings || 0)))
+            : userData.taskEarnings || 0;
+
+        transaction.update(userRef, {
+          gamingEarnings: newGamingEarnings,
+          taskEarnings: newTaskEarnings,
+          history: arrayUnion({
+            task: `Spin to Win (Stake KSh ${selectedStake}, ${userData.username || 'User'})`,
+            reward: -selectedStake,
+            date: new Date().toLocaleString(),
+          }),
+        });
+      });
       const newPrizeNumber = Math.floor(Math.random() * data.length);
       setPrizeNumber(newPrizeNumber);
       setMustSpin(true);
+    } catch (err) {
+      console.error('Stake deduction error:', err);
+      setStakeError('Failed to deduct stake. Please try again.');
     }
   };
 
@@ -81,37 +148,24 @@ const Tasks = () => {
     if (user) {
       const userRef = doc(db, 'users', user.uid);
       try {
-        const newGamingEarnings = Math.max(0, (userData?.gamingEarnings || 0) - selectedStake);
-        const newTaskEarnings =
-          newGamingEarnings === 0 && selectedStake > (userData?.gamingEarnings || 0)
-            ? Math.max(0, (userData?.taskEarnings || 0) - (selectedStake - (userData?.gamingEarnings || 0)))
-            : userData?.taskEarnings || 0;
-
         await updateDoc(userRef, {
-          gamingEarnings: newGamingEarnings + rewardValue,
-          taskEarnings: newTaskEarnings,
-          history: arrayUnion(
-            {
-              task: `Spin to Win (Stake KSh ${selectedStake}, ${userData?.username || 'User'})`,
-              reward: -selectedStake,
-              date: new Date().toLocaleString(),
-            },
-            {
-              task: `Spin to Win (${userData?.username || 'User'})`,
-              reward: rewardValue,
-              date: new Date().toLocaleString(),
-            }
-          ),
+          gamingEarnings: (userData?.gamingEarnings || 0) + rewardValue,
+          spinCount: spinCount + 1,
+          history: arrayUnion({
+            task: `Spin to Win (${userData?.username || 'User'})`,
+            reward: rewardValue,
+            date: new Date().toLocaleString(),
+          }),
         });
+        setSpinCount(spinCount + 1);
+        if (spinCount + 1 === 3 && !isBettingAccountActive) {
+          setShowActivationModal(true);
+        }
       } catch (err) {
         console.error('Spin to Win error:', err);
         alert('Failed to save reward. Please try again.');
       }
     }
-
-    // setTimeout(() => {
-    //   navigate('/home', { replace: true });
-    // }, 3000);
   };
 
   const handleWithdrawal = async () => {
@@ -154,6 +208,50 @@ const Tasks = () => {
     navigate('/deposit', { replace: true, state: { from: '/tasks' } });
   };
 
+  const handleActivation = async () => {
+    if (!user) {
+      setActivationError('Please sign in to activate.');
+      return;
+    }
+    if (!phone) {
+      setActivationError('M-Pesa phone number not found.');
+      return;
+    }
+    const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+    if (totalBalance < 150) {
+      setActivationError('Insufficient balance to activate (KSh 150 required). Please deposit.');
+      return;
+    }
+
+    setActivationLoading(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const newGamingEarnings = Math.max(0, (userData?.gamingEarnings || 0) - 150);
+      const newTaskEarnings =
+        newGamingEarnings === 0 && 150 > (userData?.gamingEarnings || 0)
+          ? Math.max(0, (userData?.taskEarnings || 0) - (150 - (userData?.gamingEarnings || 0)))
+          : userData?.taskEarnings || 0;
+
+      await updateDoc(userRef, {
+        gamingEarnings: newGamingEarnings,
+        taskEarnings: newTaskEarnings,
+        isBettingAccountActive: true,
+        history: arrayUnion({
+          task: 'Account Activation',
+          reward: -150,
+          date: new Date().toLocaleString(),
+        }),
+      });
+      setIsBettingAccountActive(true);
+      setShowActivationModal(false);
+      alert('Betting account activated successfully! You can now spin and withdraw instantly.');
+    } catch (err) {
+      console.error('Activation error:', err);
+      setActivationError('Failed to activate account. Please try again.');
+    }
+    setActivationLoading(false);
+  };
+
   const players = usePlayerData();
 
   return (
@@ -171,7 +269,7 @@ const Tasks = () => {
             />
             <div className="flex flex-col flex-grow">
               <p className="text-lg font-roboto">
-                Spin to Win for a chance to earn up to KSh 10,000!
+                Spin to Win for a chance to earn up to KSh 450!
               </p>
             </div>
           </div>
@@ -254,7 +352,7 @@ const Tasks = () => {
             ))}
             <input
               type="number"
-              min="10"
+              min="20"
               step="0.01"
               placeholder="Custom Stake"
               onChange={handleStakeInput}
@@ -263,9 +361,9 @@ const Tasks = () => {
           </div>
           <button
             onClick={handleSpinClick}
-            disabled={mustSpin || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < selectedStake || selectedStake < 10}
+            disabled={mustSpin || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < selectedStake || selectedStake < 20 || (spinCount >= 3 && !isBettingAccountActive)}
             className={`mt-4 bg-highlight text-white px-6 py-3 rounded-full font-roboto hover:bg-accent transition duration-300 w-full ${
-              mustSpin || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < selectedStake || selectedStake < 10
+              mustSpin || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < selectedStake || selectedStake < 20 || (spinCount >= 3 && !isBettingAccountActive)
                 ? 'opacity-50 cursor-not-allowed'
                 : ''
             }`}
@@ -297,6 +395,52 @@ const Tasks = () => {
             ))}
           </div>
         </div>
+        {/* Activation Modal */}
+        {showActivationModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => {}}>
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg">
+              <ExclamationTriangleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
+              <h2 className="text-lg font-bold text-primary font-roboto mb-4">
+                Activate Your Betting Account
+              </h2>
+              <p className="text-primary font-roboto mb-4">
+                You've completed your 3 free spins! Activate your betting account for only KSh 150 to continue spinning and enable instant withdrawals.
+              </p>
+              {activationError && (
+                <p className="text-red-500 text-sm mb-4">{activationError}</p>
+              )}
+              <div className="mb-4">
+                <label className="block text-sm font-roboto mb-1 text-primary">M-Pesa Phone Number</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  readOnly
+                  className="w-full bg-gray-100 text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={handleActivation}
+                  disabled={activationLoading || !user || !phone || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 150}
+                  className={`bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
+                    activationLoading || !user || !phone || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 150
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:bg-accent'
+                  }`}
+                >
+                  {activationLoading ? 'Processing...' : 'Activate Now (KSh 150)'}
+                </button>
+                {/* <button
+                  onClick={handleDeposit}
+                  className="bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
+                >
+                  <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+                  Deposit
+                </button> */}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
