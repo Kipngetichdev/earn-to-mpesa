@@ -6,6 +6,7 @@ import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { CurrencyDollarIcon } from '@heroicons/react/24/solid';
 import surveyImage from '../assets/spin.png';
+import { usePlayerData } from '../services/playerData';
 
 const Tasks = () => {
   const navigate = useNavigate();
@@ -108,9 +109,9 @@ const Tasks = () => {
       }
     }
 
-    // setTimeout(() => {
-    //   navigate('/home', { replace: true });
-    // }, 3000);
+    setTimeout(() => {
+      navigate('/home', { replace: true });
+    }, 3000);
   };
 
   const handleWithdrawal = async () => {
@@ -151,6 +152,8 @@ const Tasks = () => {
   const handleDeposit = () => {
     alert('Deposit functionality coming soon!');
   };
+
+  const players = usePlayerData();
 
   return (
     <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4 pb-20">
@@ -239,8 +242,10 @@ const Tasks = () => {
               <button
                 key={stake}
                 onClick={() => handleStakeSelect(stake)}
-                className={`flex-1 bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 min-w-[60px] ${
-                  selectedStake === stake ? 'bg-accent text-white' : 'hover:bg-accent hover:text-white'
+                className={`flex-1 px-3 py-2 rounded-lg font-roboto transition duration-300 min-w-[60px] ${
+                  selectedStake === stake 
+                    ? 'bg-highlight text-white font-bold shadow-md' 
+                    : 'bg-white text-primary hover:bg-accent hover:text-white'
                 }`}
               >
                 KSh {stake}
@@ -252,7 +257,7 @@ const Tasks = () => {
               step="0.01"
               placeholder="Custom Stake"
               onChange={handleStakeInput}
-              className="flex-1 bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 min-w-[60px] focus:outline-none focus:ring-2 focus:ring-accent"
+              className="flex-1 bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 min-w-[60px] focus:outline-none focus:ring-2 focus:ring-highlight"
             />
           </div>
           <button
@@ -266,6 +271,30 @@ const Tasks = () => {
           >
             {mustSpin ? 'Spinning...' : `Spin for KSh ${selectedStake.toFixed(2)}`}
           </button>
+        </div>
+        <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-2 mt-4">
+          <p className="text-lg font-bold font-roboto">Players</p>
+          <div className="max-h-60 overflow-y-auto">
+            <div className="grid grid-cols-4 gap-2 text-sm font-roboto font-bold text-primary bg-gray-100 p-2 rounded-t-lg">
+              <span>User ID</span>
+              <span>Result</span>
+              <span>Stake</span>
+              <span>Cashout</span>
+            </div>
+            {players.map((player, index) => (
+              <div
+                key={index}
+                className="grid grid-cols-4 gap-2 text-sm font-roboto bg-white text-primary p-2 hover:bg-gray-100 transition duration-300"
+              >
+                <span>{player.userId}</span>
+                <span className={player.result === 'Won' ? 'text-green-500' : 'text-red-500'}>
+                  {player.result}
+                </span>
+                <span>KSh {player.stake.toFixed(2)}</span>
+                <span>KSh {player.cashout.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
