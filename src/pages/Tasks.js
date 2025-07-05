@@ -24,6 +24,7 @@ const Tasks = () => {
   const [activationError, setActivationError] = useState('');
   const [activationLoading, setActivationLoading] = useState(false);
   const [phone, setPhone] = useState(userData?.phone || '');
+  const [phoneError, setPhoneError] = useState('');
 
   const stakes = [20, 50, 100, 150, 200, 300];
 
@@ -82,6 +83,18 @@ const Tasks = () => {
     } else {
       setSelectedStake(numValue);
       setStakeError('');
+    }
+  };
+
+  const handlePhoneInput = (e) => {
+    const value = e.target.value;
+    setPhone(value);
+    // Validate Kenyan phone number (+2547XXXXXXXX or 07XXXXXXXX)
+    const phoneRegex = /^(\+2547\d{8}|07\d{8})$/;
+    if (!phoneRegex.test(value)) {
+      setPhoneError('Please enter a valid Kenyan phone number (e.g., +2547XXXXXXXX or 07XXXXXXXX).');
+    } else {
+      setPhoneError('');
     }
   };
 
@@ -214,7 +227,12 @@ const Tasks = () => {
       return;
     }
     if (!phone) {
-      setActivationError('M-Pesa phone number not found.');
+      setActivationError('Please enter a phone number.');
+      return;
+    }
+    const phoneRegex = /^(\+2547\d{8}|07\d{8})$/;
+    if (!phoneRegex.test(phone)) {
+      setActivationError('Please enter a valid Kenyan phone number (e.g., +2547XXXXXXXX or 07XXXXXXXX).');
       return;
     }
     const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
@@ -236,6 +254,7 @@ const Tasks = () => {
         gamingEarnings: newGamingEarnings,
         taskEarnings: newTaskEarnings,
         isBettingAccountActive: true,
+        phone: phone, // Update phone number in Firestore
         history: arrayUnion({
           task: 'Account Activation',
           reward: -150,
@@ -409,34 +428,31 @@ const Tasks = () => {
               {activationError && (
                 <p className="text-red-500 text-sm mb-4">{activationError}</p>
               )}
+              {phoneError && (
+                <p className="text-red-500 text-sm mb-4">{phoneError}</p>
+              )}
               <div className="mb-4">
                 <label className="block text-sm font-roboto mb-1 text-primary">M-Pesa Phone Number</label>
                 <input
                   type="tel"
                   value={phone}
-                  readOnly
-                  className="w-full bg-gray-100 text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 focus:outline-none"
+                  onChange={handlePhoneInput}
+                  placeholder="e.g., +2547XXXXXXXX or 07XXXXXXXX"
+                  className="w-full bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 focus:outline-none focus:ring-2 focus:ring-highlight"
                 />
               </div>
               <div className="flex justify-center gap-4">
                 <button
                   onClick={handleActivation}
-                  disabled={activationLoading || !user || !phone || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 150}
+                  disabled={activationLoading || !user || phoneError || !phone || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 150}
                   className={`bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
-                    activationLoading || !user || !phone || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 150
+                    activationLoading || !user || phoneError || !phone || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 150
                       ? 'opacity-50 cursor-not-allowed'
                       : 'hover:bg-accent'
                   }`}
                 >
                   {activationLoading ? 'Processing...' : 'Activate Now (KSh 150)'}
                 </button>
-                {/* <button
-                  onClick={handleDeposit}
-                  className="bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
-                >
-                  <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-                  Deposit
-                </button> */}
               </div>
             </div>
           </div>
