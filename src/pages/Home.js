@@ -21,8 +21,8 @@ import {
   BeakerIcon,
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
-import { useNavigate } from 'react-router-dom';
-import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { doc, updateDoc, arrayUnion, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import QuizCategories from '../components/QuizCategories';
 import UpgradeAccount from '../components/UpgradeAccount';
@@ -185,7 +185,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
             if (completedAt) {
               const completedTime = new Date(completedAt); // Parse ISO string
               const diffMinutes = (now - completedTime) / (1000 * 60);
-              if (diffMinutes < 120) { // 2 hours = 120 minutes
+              if (diffMinutes < 5) { // 2 hours = 120 minutes// updated to 5 mins
                 disabled[categoryId] = true;
               }
             }
@@ -366,19 +366,71 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
 };
 
 const Home = () => {
-  const { user, userData } = useContext(AuthContext);
+  const { user, userData, loading: authLoading } = useContext(AuthContext);
+  const [localUserData, setLocalUserData] = useState(userData);
   const [selectedPlan, setSelectedPlan] = useState(userData?.plan || 'free');
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [withdrawalError, setWithdrawalError] = useState('');
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Check userCollectedReward and redirect to /reward自在
+  // Sync localUserData with userData when it changes
+  useEffect(() => {
+    setLocalUserData(userData);
+    if (!authLoading && userData) {
+      setBalanceLoading(false);
+    }
+  }, [userData, authLoading]);
+
+  // Fetch user data and set up real-time listener
+  useEffect(() => {
+    if (!user || authLoading) {
+      setBalanceLoading(false);
+      setLocalUserData(null);
+      return;
+    }
+
+    const userRef = doc(db, 'users', user.uid);
+    // Initial fetch
+    const fetchUserData = async () => {
+      try {
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setLocalUserData(data); // Update local state
+          console.log('Home fetched userData:', data); // Debug
+          setBalanceLoading(false);
+        }
+      } catch (err) {
+        console.error('Home fetch userData error:', err);
+        setBalanceLoading(false);
+      }
+    };
+
+    // Real-time listener
+    const unsubscribe = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setLocalUserData(data); // Update local state
+        console.log('Home onSnapshot userData:', data); // Debug
+        setBalanceLoading(false);
+      }
+    }, (err) => {
+      console.error('Home onSnapshot error:', err);
+      setBalanceLoading(false);
+    });
+
+    fetchUserData(); // Initial fetch
+    return () => unsubscribe(); // Cleanup listener
+  }, [user, authLoading]);
+
+  // Check userCollectedReward and redirect to /reward
   useEffect(() => {
     const checkUserCollectedReward = async () => {
-      if (user) {
+      if (user && !authLoading) {
         try {
-          // Fetch user document to ensure latest userCollectedReward
           const userRef = doc(db, 'users', user.uid);
           const userSnap = await getDoc(userRef);
           const userData = userSnap.exists() ? userSnap.data() : {};
@@ -392,19 +444,19 @@ const Home = () => {
       }
     };
     checkUserCollectedReward();
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   // Debug userData and selectedPlan
-  console.log('Home userData:', userData);
+  console.log('Home localUserData:', localUserData);
   console.log('Home selectedPlan:', selectedPlan);
 
   // Get current time in EAT (UTC+3) and greeting with emoji
   const getGreeting = () => {
     const date = new Date();
     const hours = date.getUTCHours() + 3; // Adjust for EAT
-    if (hours < 12) return { text: `Habari za Asubuhi, ${userData?.username || 'User'}!`, emoji: '☀️' };
-    if (hours < 18) return { text: `Habari za Mchana, ${userData?.username || 'User'}!`, emoji: '🌞' };
-    return { text: `Habari za Usiku, ${userData?.username || 'User'}!`, emoji: '🌙' };
+    if (hours < 12) return { text: `Habari za Asubuhi, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '☀️' };
+    if (hours < 18) return { text: `Habari za Mchana, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '🌞' };
+    return { text: `Habari za Usiku, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '🌙' };
   };
 
   const { text: greetingText, emoji } = getGreeting();
@@ -419,11 +471,11 @@ const Home = () => {
       setWithdrawalError('Please sign in to withdraw.');
       return;
     }
-    if (!userData?.phone) {
+    if (!localUserData?.phone) {
       setWithdrawalError('M-Pesa phone number not found.');
       return;
     }
-    const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+    const totalBalance = (localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0);
     if (totalBalance < 10) {
       setWithdrawalError('Minimum withdrawal amount is KSh 10.');
       return;
@@ -432,16 +484,26 @@ const Home = () => {
     setWithdrawalLoading(true);
     try {
       const userRef = doc(db, 'users', user.uid);
+      // Align with Earnings.jsx withdrawal logic
+      let newGamingEarnings = localUserData?.gamingEarnings || 0;
+      let newTaskEarnings = localUserData?.taskEarnings || 0;
+      if (totalBalance <= newGamingEarnings) {
+        newGamingEarnings -= totalBalance;
+      } else {
+        const remaining = totalBalance - newGamingEarnings;
+        newGamingEarnings = 0;
+        newTaskEarnings = Math.max(0, newTaskEarnings - remaining);
+      }
       await updateDoc(userRef, {
-        gamingEarnings: 0,
-        taskEarnings: 0,
+        gamingEarnings: newGamingEarnings,
+        taskEarnings: newTaskEarnings,
         history: arrayUnion({
-          task: 'M-Pesa Withdrawal',
+          task: `M-Pesa Withdrawal (${localUserData.phone})`,
           reward: -totalBalance,
           date: new Date().toLocaleString(),
         }),
       });
-      alert(`Withdrawal of KSh ${totalBalance.toFixed(2)} to ${userData.phone} initiated successfully!`);
+      alert(`Withdrawal of KSh ${totalBalance.toFixed(2)} to ${localUserData.phone} initiated successfully!`);
     } catch (err) {
       console.error('Withdrawal error:', err);
       setWithdrawalError('Failed to process withdrawal. Please try again.');
@@ -457,55 +519,61 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4">
       <div className="w-full max-w-md">
-        <h2 className="text-031 font-bold text-primary mb-4">
+        <h2 className="text-left font-bold text-primary font-roboto mb-4">
           {greetingText} {emoji}
         </h2>
         <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-2">
-          <div className="flex items-center">
-            <img
-              src={surveyImage}
-              alt="Survey"
-              className="w-20 h-20 object-cover rounded-md mr-4"
-            />
-            <div className="flex flex-col flex-grow">
+          {balanceLoading || authLoading ? (
+            <p className="text-lg font-roboto text-center">Loading balance...</p>
+          ) : (
+            <>
+              <div className="flex items-center">
+                <img
+                  src={surveyImage}
+                  alt="Survey"
+                  className="w-20 h-20 object-cover rounded-md mr-4"
+                />
+                <div className="flex flex-col flex-grow">
+                  <p className="text-lg font-roboto">
+                    You qualify for multiple surveys
+                  </p>
+                </div>
+              </div>
               <p className="text-lg font-roboto">
-                You qualify for multiple surveys
+                Gaming Earnings: KSh {localUserData?.gamingEarnings ? localUserData.gamingEarnings.toFixed(2) : '0.00'}
               </p>
-            </div>
-          </div>
-          <p className="text-lg font-roboto">
-            Gaming Earnings: KSh {userData?.gamingEarnings ? userData.gamingEarnings.toFixed(2) : '0.00'}
-          </p>
-          <p className="text-lg font-roboto">
-            Tasks Earnings: KSh {userData?.taskEarnings ? userData.taskEarnings.toFixed(2) : '0.00'}
-          </p>
-          <p className="text-lg font-bold font-roboto">
-            Total: KSh {((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)).toFixed(2)}
-          </p>
-          {withdrawalError && (
-            <p className="text-red-500 text-sm">{withdrawalError}</p>
+              <p className="text-lg font-roboto">
+                Tasks Earnings: KSh {localUserData?.taskEarnings ? localUserData.taskEarnings.toFixed(2) : '0.00'}
+              </p>
+              <p className="text-lg font-bold font-roboto">
+                Total: KSh {((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)).toFixed(2)}
+              </p>
+              {withdrawalError && (
+                <p className="text-red-500 text-sm">{withdrawalError}</p>
+              )}
+              <div className="flex justify-between gap-4 mt-4">
+                <button
+                  onClick={handleWithdrawal}
+                  disabled={withdrawalLoading || !user || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 10}
+                  className={`flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
+                    withdrawalLoading || !user || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 10
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:bg-accent hover:text-white'
+                  }`}
+                >
+                  <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+                  {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
+                </button>
+                <button
+                  onClick={handleDeposit}
+                  className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
+                >
+                  <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+                  Deposit
+                </button>
+              </div>
+            </>
           )}
-          <div className="flex justify-between gap-4 mt-4">
-            <button
-              onClick={handleWithdrawal}
-              disabled={withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10}
-              className={`flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
-                withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'hover:bg-accent hover:text-white'
-              }`}
-            >
-              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-              {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
-            </button>
-            <button
-              onClick={handleDeposit}
-              className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
-            >
-              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-              Deposit
-            </button>
-          </div>
         </div>
         <div className="flex items-center justify-between mt-4">
           <p className="text-primary font-roboto text-lg">Available Surveys</p>
@@ -532,12 +600,12 @@ const Home = () => {
             </button>
           ))}
         </div>
-        <QuizCategories plan={selectedPlan} accessPlan={userData?.plan || 'free'} user={user} />
+        <QuizCategories plan={selectedPlan} accessPlan={localUserData?.plan || userData?.plan || 'free'} user={user} />
         <BottomSheet
           isOpen={isBottomSheetOpen}
           onClose={() => setIsBottomSheetOpen(false)}
           user={user}
-          accessPlan={userData?.plan || 'free'}
+          accessPlan={localUserData?.plan || userData?.plan || 'free'}
         />
       </div>
     </div>

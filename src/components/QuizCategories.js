@@ -275,7 +275,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
                     Start Survey
                   </button>
                   {isDisabled && (
-                    <p className="text-sm text-gray-500 font-roboto mt-1">Available again in 2Hrs</p>
+                    <p className="text-sm text-gray-500 font-roboto mt-1">Available again in 5Mins</p>
                   )}
                 </div>
               </div>
