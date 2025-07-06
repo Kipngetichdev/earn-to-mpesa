@@ -555,7 +555,7 @@ const Home = () => {
                 <button
                   onClick={handleWithdrawal}
                   disabled={withdrawalLoading || !user || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 10}
-                  className={`flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
+                  className={`flex-1 bg-white text-primary px-4 py-4 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
                     withdrawalLoading || !user || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 10
                       ? 'opacity-50 cursor-not-allowed'
                       : 'hover:bg-accent hover:text-white'
@@ -564,13 +564,13 @@ const Home = () => {
                   <CurrencyDollarIcon className="w-5 h-5 mr-2" />
                   {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
                 </button>
-                <button
+                {/* <button
                   onClick={handleDeposit}
                   className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
                 >
                   <CurrencyDollarIcon className="w-5 h-5 mr-2" />
                   Deposit
-                </button>
+                </button> */}
               </div>
             </>
           )}

@@ -2,7 +2,7 @@ import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wheel } from 'react-custom-roulette';
 import { AuthContext } from '../context/AuthContext';
-import { doc, updateDoc, arrayUnion, getDoc, runTransaction } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, getDoc, runTransaction, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { CurrencyDollarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid';
 import surveyImage from '../assets/spin.png';
@@ -10,7 +10,8 @@ import { usePlayerData } from '../services/playerData';
 
 const Tasks = () => {
   const navigate = useNavigate();
-  const { user, userData } = useContext(AuthContext);
+  const { user, userData, loading: authLoading } = useContext(AuthContext);
+  const [localUserData, setLocalUserData] = useState(userData); // Local state for Firestore data
   const [mustSpin, setMustSpin] = useState(false);
   const [prizeNumber, setPrizeNumber] = useState(0);
   const [reward, setReward] = useState(null);
@@ -25,6 +26,7 @@ const Tasks = () => {
   const [activationLoading, setActivationLoading] = useState(false);
   const [phone, setPhone] = useState(userData?.phone || '');
   const [phoneError, setPhoneError] = useState('');
+  const [balanceLoading, setBalanceLoading] = useState(true);
 
   const stakes = [20, 50, 100, 150, 200, 300];
 
@@ -39,30 +41,80 @@ const Tasks = () => {
     { option: 'KSh 450', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
   ];
 
-  // Fetch spinCount and isBettingAccountActive, show modal if needed
+  // Sync localUserData with userData when it changes
   useEffect(() => {
+    setLocalUserData(userData);
+    if (!authLoading && userData) {
+      setBalanceLoading(false);
+    }
+  }, [userData, authLoading]);
+
+  // Fetch user data and set up real-time listener
+  useEffect(() => {
+    if (!user || authLoading) {
+      setBalanceLoading(false);
+      setLocalUserData(null);
+      setSpinCount(0);
+      setIsBettingAccountActive(false);
+      setPhone('');
+      return;
+    }
+
+    const userRef = doc(db, 'users', user.uid);
+    // Initial fetch
     const fetchUserData = async () => {
-      if (user) {
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            const data = userSnap.data();
-            setSpinCount(data.spinCount || 0);
-            setIsBettingAccountActive(data.isBettingAccountActive || false);
-            setPhone(data.phone || '');
-            if (data.spinCount >= 3 && !data.isBettingAccountActive) {
-              setShowActivationModal(true);
-            }
-            console.log('Tasks fetched user data:', { spinCount: data.spinCount, isBettingAccountActive: data.isBettingAccountActive });
+      try {
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setLocalUserData(data); // Update local state
+          setSpinCount(data.spinCount || 0);
+          setIsBettingAccountActive(data.isBettingAccountActive || false);
+          setPhone(data.phone || '');
+          if (data.spinCount >= 3 && !data.isBettingAccountActive) {
+            setShowActivationModal(true);
           }
-        } catch (err) {
-          console.error('Fetch user data error:', err);
+          console.log('Tasks fetched user data:', { 
+            gamingEarnings: data.gamingEarnings, 
+            taskEarnings: data.taskEarnings,
+            spinCount: data.spinCount, 
+            isBettingAccountActive: data.isBettingAccountActive 
+          });
+          setBalanceLoading(false);
         }
+      } catch (err) {
+        console.error('Tasks fetch user data error:', err);
+        setBalanceLoading(false);
       }
     };
-    fetchUserData();
-  }, [user]);
+
+    // Real-time listener
+    const unsubscribe = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setLocalUserData(data); // Update local state
+        setSpinCount(data.spinCount || 0);
+        setIsBettingAccountActive(data.isBettingAccountActive || false);
+        setPhone(data.phone || '');
+        if (data.spinCount >= 3 && !data.isBettingAccountActive) {
+          setShowActivationModal(true);
+        }
+        console.log('Tasks onSnapshot user data:', { 
+          gamingEarnings: data.gamingEarnings, 
+          taskEarnings: data.taskEarnings,
+          spinCount: data.spinCount, 
+          isBettingAccountActive: data.isBettingAccountActive 
+        });
+        setBalanceLoading(false);
+      }
+    }, (err) => {
+      console.error('Tasks onSnapshot error:', err);
+      setBalanceLoading(false);
+    });
+
+    fetchUserData(); // Initial fetch
+    return () => unsubscribe(); // Cleanup listener
+  }, [user, authLoading]);
 
   const handleStakeSelect = (stake) => {
     setSelectedStake(stake);
@@ -104,7 +156,7 @@ const Tasks = () => {
       setStakeError('Please sign in to spin.');
       return;
     }
-    const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+    const totalBalance = (localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0);
     if (totalBalance < selectedStake) {
       setStakeError('Insufficient balance to spin with selected stake.');
       return;
@@ -161,11 +213,13 @@ const Tasks = () => {
     if (user) {
       const userRef = doc(db, 'users', user.uid);
       try {
+        const userSnap = await getDoc(userRef);
+        const currentData = userSnap.exists() ? userSnap.data() : {};
         await updateDoc(userRef, {
-          gamingEarnings: (userData?.gamingEarnings || 0) + rewardValue,
+          gamingEarnings: (currentData.gamingEarnings || 0) + rewardValue,
           spinCount: spinCount + 1,
           history: arrayUnion({
-            task: `Spin to Win (${userData?.username || 'User'})`,
+            task: `Spin to Win (${currentData.username || 'User'})`,
             reward: rewardValue,
             date: new Date().toLocaleString(),
           }),
@@ -186,11 +240,11 @@ const Tasks = () => {
       setWithdrawalError('Please sign in to withdraw.');
       return;
     }
-    if (!userData?.phone) {
+    if (!localUserData?.phone) {
       setWithdrawalError('M-Pesa phone number not found.');
       return;
     }
-    const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+    const totalBalance = (localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0);
     if (totalBalance < 10) {
       setWithdrawalError('Minimum withdrawal amount is KSh 10.');
       return;
@@ -199,16 +253,27 @@ const Tasks = () => {
     setWithdrawalLoading(true);
     try {
       const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      const currentData = userSnap.exists() ? userSnap.data() : {};
+      let newGamingEarnings = currentData.gamingEarnings || 0;
+      let newTaskEarnings = currentData.taskEarnings || 0;
+      if (totalBalance <= newGamingEarnings) {
+        newGamingEarnings -= totalBalance;
+      } else {
+        const remaining = totalBalance - newGamingEarnings;
+        newGamingEarnings = 0;
+        newTaskEarnings = Math.max(0, newTaskEarnings - remaining);
+      }
       await updateDoc(userRef, {
-        gamingEarnings: 0,
-        taskEarnings: 0,
+        gamingEarnings: newGamingEarnings,
+        taskEarnings: newTaskEarnings,
         history: arrayUnion({
-          task: 'M-Pesa Withdrawal',
+          task: `M-Pesa Withdrawal (${localUserData.phone})`,
           reward: -totalBalance,
           date: new Date().toLocaleString(),
         }),
       });
-      alert(`Withdrawal of KSh ${totalBalance.toFixed(2)} to ${userData.phone} initiated successfully!`);
+      alert(`Withdrawal of KSh ${totalBalance.toFixed(2)} to ${localUserData.phone} initiated successfully!`);
     } catch (err) {
       console.error('Withdrawal error:', err);
       setWithdrawalError('Failed to process withdrawal. Please try again.');
@@ -235,7 +300,7 @@ const Tasks = () => {
       setActivationError('Please enter a valid Kenyan phone number (e.g., +2547XXXXXXXX or 07XXXXXXXX).');
       return;
     }
-    const totalBalance = (userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0);
+    const totalBalance = (localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0);
     if (totalBalance < 150) {
       setActivationError('Insufficient balance to activate (KSh 150 required). Please deposit.');
       return;
@@ -244,11 +309,13 @@ const Tasks = () => {
     setActivationLoading(true);
     try {
       const userRef = doc(db, 'users', user.uid);
-      const newGamingEarnings = Math.max(0, (userData?.gamingEarnings || 0) - 150);
+      const userSnap = await getDoc(userRef);
+      const currentData = userSnap.exists() ? userSnap.data() : {};
+      const newGamingEarnings = Math.max(0, (currentData.gamingEarnings || 0) - 150);
       const newTaskEarnings =
-        newGamingEarnings === 0 && 150 > (userData?.gamingEarnings || 0)
-          ? Math.max(0, (userData?.taskEarnings || 0) - (150 - (userData?.gamingEarnings || 0)))
-          : userData?.taskEarnings || 0;
+        newGamingEarnings === 0 && 150 > (currentData.gamingEarnings || 0)
+          ? Math.max(0, (currentData.taskEarnings || 0) - (150 - (currentData.gamingEarnings || 0)))
+          : currentData.taskEarnings || 0;
 
       await updateDoc(userRef, {
         gamingEarnings: newGamingEarnings,
@@ -277,54 +344,60 @@ const Tasks = () => {
     <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4 pb-20">
       <div className="w-full max-w-md">
         <h5 className="text-left font-bold text-primary font-roboto mb-4">
-          Welcome, {userData?.username || 'User'}! Spin to Win!
+          Welcome, {localUserData?.username || userData?.username || 'User'}! Spin to Win!
         </h5>
         <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-2">
-          <div className="flex items-center">
-            <img
-              src={surveyImage}
-              alt="Spin to Win"
-              className="w-20 h-20 object-cover rounded-md mr-4"
-            />
-            <div className="flex flex-col flex-grow">
+          {balanceLoading || authLoading ? (
+            <p className="text-lg font-roboto text-center">Loading balance...</p>
+          ) : (
+            <>
+              <div className="flex items-center">
+                <img
+                  src={surveyImage}
+                  alt="Spin to Win"
+                  className="w-20 h-20 object-cover rounded-md mr-4"
+                />
+                <div className="flex flex-col flex-grow">
+                  <p className="text-lg font-roboto">
+                    Spin to Win for a chance to earn up to KSh 450!
+                  </p>
+                </div>
+              </div>
               <p className="text-lg font-roboto">
-                Spin to Win for a chance to earn up to KSh 450!
+                Gaming Earnings: KSh {localUserData?.gamingEarnings ? localUserData.gamingEarnings.toFixed(2) : '0.00'}
               </p>
-            </div>
-          </div>
-          <p className="text-lg font-roboto">
-            Gaming Earnings: KSh {userData?.gamingEarnings ? userData.gamingEarnings.toFixed(2) : '0.00'}
-          </p>
-          <p className="text-lg font-roboto">
-            Tasks Earnings: KSh {userData?.taskEarnings ? userData.taskEarnings.toFixed(2) : '0.00'}
-          </p>
-          <p className="text-lg font-bold font-roboto">
-            Total: KSh {((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)).toFixed(2)}
-          </p>
-          {withdrawalError && (
-            <p className="text-red-500 text-sm">{withdrawalError}</p>
+              <p className="text-lg font-roboto">
+                Tasks Earnings: KSh {localUserData?.taskEarnings ? localUserData.taskEarnings.toFixed(2) : '0.00'}
+              </p>
+              <p className="text-lg font-bold font-roboto">
+                Total: KSh {((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)).toFixed(2)}
+              </p>
+              {withdrawalError && (
+                <p className="text-red-500 text-sm">{withdrawalError}</p>
+              )}
+              <div className="flex justify-between gap-4 mt-4">
+                <button
+                  onClick={handleWithdrawal}
+                  disabled={withdrawalLoading || !user || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 10}
+                  className={`flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
+                    withdrawalLoading || !user || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 10
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:bg-accent hover:text-white'
+                  }`}
+                >
+                  <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+                  {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
+                </button>
+                <button
+                  onClick={handleDeposit}
+                  className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
+                >
+                  <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+                  Deposit
+                </button>
+              </div>
+            </>
           )}
-          <div className="flex justify-between gap-4 mt-4">
-            <button
-              onClick={handleWithdrawal}
-              disabled={withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10}
-              className={`flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
-                withdrawalLoading || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 10
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'hover:bg-accent hover:text-white'
-              }`}
-            >
-              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-              {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
-            </button>
-            <button
-              onClick={handleDeposit}
-              className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
-            >
-              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-              Deposit
-            </button>
-          </div>
         </div>
         <div className="mt-6 relative z-0">
           <Wheel
@@ -380,9 +453,9 @@ const Tasks = () => {
           </div>
           <button
             onClick={handleSpinClick}
-            disabled={mustSpin || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < selectedStake || selectedStake < 20 || (spinCount >= 3 && !isBettingAccountActive)}
+            disabled={mustSpin || !user || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < selectedStake || selectedStake < 20 || (spinCount >= 3 && !isBettingAccountActive)}
             className={`mt-4 bg-highlight text-white px-6 py-3 rounded-full font-roboto hover:bg-accent transition duration-300 w-full ${
-              mustSpin || !user || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < selectedStake || selectedStake < 20 || (spinCount >= 3 && !isBettingAccountActive)
+              mustSpin || !user || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < selectedStake || selectedStake < 20 || (spinCount >= 3 && !isBettingAccountActive)
                 ? 'opacity-50 cursor-not-allowed'
                 : ''
             }`}
@@ -444,9 +517,9 @@ const Tasks = () => {
               <div className="flex justify-center gap-4">
                 <button
                   onClick={handleActivation}
-                  disabled={activationLoading || !user || phoneError || !phone || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 150}
+                  disabled={activationLoading || !user || phoneError || !phone || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 150}
                   className={`bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
-                    activationLoading || !user || phoneError || !phone || ((userData?.gamingEarnings || 0) + (userData?.taskEarnings || 0)) < 150
+                    activationLoading || !user || phoneError || !phone || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 150
                       ? 'opacity-50 cursor-not-allowed'
                       : 'hover:bg-accent'
                   }`}

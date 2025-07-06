@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ArrowUpIcon, ArrowDownIcon, WalletIcon } from '@heroicons/react/24/solid';
 import { Line } from 'react-chartjs-2';
@@ -8,17 +8,91 @@ import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale
 
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend);
 
-const Earnings = ({ history }) => {
-  const { user, userData } = useContext(AuthContext);
+const Earnings = () => {
+  const { user, userData, loading: authLoading } = useContext(AuthContext);
+  const [localUserData, setLocalUserData] = useState(userData); // Local state for Firestore data
+  const [localHistory, setLocalHistory] = useState([]); // Local state for history
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [phone, setPhone] = useState(userData?.phone || '');
   const [error, setError] = useState('');
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(true);
 
-  const totalBalance = (userData?.taskEarnings || 0) + (userData?.gamingEarnings || 0);
+  const totalBalance = (localUserData?.taskEarnings || 0) + (localUserData?.gamingEarnings || 0);
+
+  // Sync localUserData with userData when it changes
+  useEffect(() => {
+    setLocalUserData(userData);
+    setPhone(userData?.phone || '');
+    if (!authLoading && userData) {
+      setBalanceLoading(false);
+      setChartLoading(false);
+    }
+  }, [userData, authLoading]);
+
+  // Fetch user data and set up real-time listener
+  useEffect(() => {
+    if (!user || authLoading) {
+      setBalanceLoading(false);
+      setChartLoading(false);
+      setLocalUserData(null);
+      setLocalHistory([]);
+      setPhone('');
+      return;
+    }
+
+    const userRef = doc(db, 'users', user.uid);
+    // Initial fetch
+    const fetchUserData = async () => {
+      try {
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          setLocalUserData(data);
+          setLocalHistory(data.history || []);
+          setPhone(data.phone || '');
+          console.log('Earnings fetched user data:', { 
+            gamingEarnings: data.gamingEarnings, 
+            taskEarnings: data.taskEarnings, 
+            history: data.history 
+          });
+          setBalanceLoading(false);
+          setChartLoading(false);
+        }
+      } catch (err) {
+        console.error('Earnings fetch user data error:', err);
+        setBalanceLoading(false);
+        setChartLoading(false);
+      }
+    };
+
+    // Real-time listener
+    const unsubscribe = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setLocalUserData(data);
+        setLocalHistory(data.history || []);
+        setPhone(data.phone || '');
+        console.log('Earnings onSnapshot user data:', { 
+          gamingEarnings: data.gamingEarnings, 
+          taskEarnings: data.taskEarnings, 
+          history: data.history 
+        });
+        setBalanceLoading(false);
+        setChartLoading(false);
+      }
+    }, (err) => {
+      console.error('Earnings onSnapshot error:', err);
+      setBalanceLoading(false);
+      setChartLoading(false);
+    });
+
+    fetchUserData(); // Initial fetch
+    return () => unsubscribe(); // Cleanup listener
+  }, [user, authLoading]);
 
   // Process history for chart (last 7 days)
   const getChartData = () => {
@@ -31,7 +105,7 @@ const Earnings = ({ history }) => {
     }).reverse();
 
     const earningsByDay = dates.reduce((acc, date) => ({ ...acc, [date]: 0 }), {});
-    history.forEach(({ reward, date }) => {
+    localHistory.forEach(({ reward, date }) => {
       const parsedDate = new Date(date);
       if (isNaN(parsedDate)) {
         console.warn(`Invalid date in history: ${date}`);
@@ -99,17 +173,16 @@ const Earnings = ({ history }) => {
     },
   };
 
-  useEffect(() => {
-    // Simulate chart data processing
-    setTimeout(() => setChartLoading(false), 500);
-  }, [history]);
-
   const validatePhone = (phone) => {
     return /^\+254\d{9}$/.test(phone);
   };
 
   const handleWithdraw = async () => {
     const amount = parseFloat(withdrawAmount);
+    if (!user) {
+      setError('Please sign in to withdraw.');
+      return;
+    }
     if (!amount || amount <= 0) {
       setError('Please enter a valid amount.');
       return;
@@ -124,8 +197,10 @@ const Earnings = ({ history }) => {
     }
     try {
       const userRef = doc(db, 'users', user.uid);
-      let newGamingEarnings = userData?.gamingEarnings || 0;
-      let newTaskEarnings = userData?.taskEarnings || 0;
+      const userSnap = await getDoc(userRef);
+      const currentData = userSnap.exists() ? userSnap.data() : {};
+      let newGamingEarnings = currentData.gamingEarnings || 0;
+      let newTaskEarnings = currentData.taskEarnings || 0;
       if (amount <= newGamingEarnings) {
         newGamingEarnings -= amount;
       } else {
@@ -144,8 +219,9 @@ const Earnings = ({ history }) => {
       });
       setShowWithdrawModal(false);
       setWithdrawAmount('');
-      setPhone(userData?.phone || '');
+      setPhone(currentData.phone || '');
       setError('');
+      alert(`Withdrawal of KSh ${amount.toFixed(2)} to ${phone} initiated successfully!`);
     } catch (err) {
       console.error('Withdraw error:', err);
       setError('Failed to process withdrawal.');
@@ -154,6 +230,10 @@ const Earnings = ({ history }) => {
 
   const handleDeposit = async () => {
     const amount = parseFloat(depositAmount);
+    if (!user) {
+      setError('Please sign in to deposit.');
+      return;
+    }
     if (!amount || amount <= 0) {
       setError('Please enter a valid amount.');
       return;
@@ -164,8 +244,10 @@ const Earnings = ({ history }) => {
     }
     try {
       const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      const currentData = userSnap.exists() ? userSnap.data() : {};
       await updateDoc(userRef, {
-        taskEarnings: (userData.taskEarnings || 0) + amount,
+        taskEarnings: (currentData.taskEarnings || 0) + amount,
         history: arrayUnion({
           task: `Deposit from M-Pesa (${phone})`,
           reward: amount,
@@ -174,8 +256,9 @@ const Earnings = ({ history }) => {
       });
       setShowDepositModal(false);
       setDepositAmount('');
-      setPhone(userData?.phone || '');
+      setPhone(currentData.phone || '');
       setError('');
+      alert(`Deposit of KSh ${amount.toFixed(2)} from ${phone} initiated successfully!`);
     } catch (err) {
       console.error('Deposit error:', err);
       setError('Failed to process deposit.');
@@ -193,19 +276,25 @@ const Earnings = ({ history }) => {
               <WalletIcon className="w-6 h-6 text-white" />
               <h3 className="text-lg font-bold font-roboto">Your Wallet</h3>
             </div>
-            <p className="text-lg font-bold font-roboto">
-              Total Balance: KSh {totalBalance.toFixed(2)}
-            </p>
-            <p className="text-sm font-roboto">
-              Available Balance: KSh {totalBalance.toFixed(2)}
-            </p>
+            {balanceLoading || authLoading ? (
+              <p className="text-lg font-roboto text-center">Loading balance...</p>
+            ) : (
+              <>
+                <p className="text-lg font-bold font-roboto">
+                  Total Balance: KSh {totalBalance.toFixed(2)}
+                </p>
+                <p className="text-sm font-roboto">
+                  Available Balance: KSh {totalBalance.toFixed(2)}
+                </p>
+              </>
+            )}
           </div>
           {/* Withdraw and Deposit Buttons */}
           <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={() => setShowWithdrawModal(true)}
               className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent hover:text-white flex items-center justify-center"
-              disabled={totalBalance <= 0}
+              disabled={totalBalance <= 0 || balanceLoading || authLoading}
             >
               <ArrowUpIcon className="w-5 h-5 mr-2" />
               Withdraw
@@ -213,6 +302,7 @@ const Earnings = ({ history }) => {
             <button
               onClick={() => setShowDepositModal(true)}
               className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent hover:text-white flex items-center justify-center"
+              disabled={balanceLoading || authLoading}
             >
               <ArrowDownIcon className="w-5 h-5 mr-2" />
               Deposit
@@ -231,12 +321,14 @@ const Earnings = ({ history }) => {
           {/* Earnings History Card */}
           <div className="bg-primary text-white p-6 rounded-lg shadow-inner">
             <h3 className="text-lg font-bold font-roboto mb-4">Earnings History</h3>
-            {history.length === 0 ? (
+            {chartLoading ? (
+              <p className="text-sm font-roboto text-center">Loading history...</p>
+            ) : localHistory.length === 0 ? (
               <p className="text-sm font-roboto">No earnings yet.</p>
             ) : (
               <div className="max-h-60 overflow-y-auto">
                 <ul className="space-y-2">
-                  {history.map((entry, index) => (
+                  {localHistory.map((entry, index) => (
                     <li
                       key={index}
                       className="bg-gray-100 text-primary p-2 rounded font-roboto text-sm"
@@ -256,7 +348,7 @@ const Earnings = ({ history }) => {
             onClick={() => {
               setShowWithdrawModal(false);
               setWithdrawAmount('');
-              setPhone(userData?.phone || '');
+              setPhone(localUserData?.phone || '');
               setError('');
             }}
           >
@@ -291,6 +383,7 @@ const Earnings = ({ history }) => {
                   <button
                     onClick={handleWithdraw}
                     className="flex-1 bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent"
+                    disabled={balanceLoading || authLoading}
                   >
                     Confirm Withdrawal
                   </button>
@@ -298,7 +391,7 @@ const Earnings = ({ history }) => {
                     onClick={() => {
                       setShowWithdrawModal(false);
                       setWithdrawAmount('');
-                      setPhone(userData?.phone || '');
+                      setPhone(localUserData?.phone || '');
                       setError('');
                     }}
                     className="flex-1 bg-gray-200 text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-gray-300"
@@ -317,7 +410,7 @@ const Earnings = ({ history }) => {
             onClick={() => {
               setShowDepositModal(false);
               setDepositAmount('');
-              setPhone(userData?.phone || '');
+              setPhone(localUserData?.phone || '');
               setError('');
             }}
           >
@@ -352,6 +445,7 @@ const Earnings = ({ history }) => {
                   <button
                     onClick={handleDeposit}
                     className="flex-1 bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent"
+                    disabled={balanceLoading || authLoading}
                   >
                     Confirm Deposit
                   </button>
@@ -359,7 +453,7 @@ const Earnings = ({ history }) => {
                     onClick={() => {
                       setShowDepositModal(false);
                       setDepositAmount('');
-                      setPhone(userData?.phone || '');
+                      setPhone(localUserData?.phone || '');
                       setError('');
                     }}
                     className="flex-1 bg-gray-200 text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-gray-300"
