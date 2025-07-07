@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { CurrencyDollarIcon } from '@heroicons/react/24/solid';
+import { CurrencyDollarIcon, CheckCircleIcon } from '@heroicons/react/24/solid';
 
 const Deposit = () => {
   const navigate = useNavigate();
@@ -11,46 +11,74 @@ const Deposit = () => {
   const { user, userData } = useContext(AuthContext);
   const [amount, setAmount] = useState('');
   const [phone, setPhone] = useState(userData?.phone || '');
-  const [depositError, setDepositError] = useState('');
+  const [amountError, setAmountError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [depositLoading, setDepositLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successAmount, setSuccessAmount] = useState(0);
+  const [successPhone, setSuccessPhone] = useState('');
 
   const validatePhone = (phone) => {
-    const phoneRegex = /^(\+254|0)7\d{8}$/;
-    return phoneRegex.test(phone);
+    const cleaned = phone.replace(/[^0-9+]/g, '');
+    return (
+      /^\+254\d{9}$/.test(cleaned) || // +254712345678
+      /^0[7|1]\d{8}$/.test(cleaned)  // 0712345678 or 0112345678
+    );
+  };
+
+  const normalizePhone = (phone) => {
+    const cleaned = phone.replace(/[^0-9+]/g, '');
+    if (/^0[7|1]\d{8}$/.test(cleaned)) {
+      return `+254${cleaned.slice(1)}`; // Convert 0712345678 or 0112345678 to +254712345678
+    }
+    return cleaned; // Already in +254 format
   };
 
   const handleDeposit = async () => {
     if (!user) {
-      setDepositError('Please sign in to deposit.');
-      return;
-    }
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount < 100) {
-      setDepositError('Deposit amount must be at least KSh 100.');
-      return;
-    }
-    if (!validatePhone(phone)) {
-      setDepositError('Please enter a valid M-Pesa phone number (e.g., +2547XXXXXXXX or 07XXXXXXXX).');
+      setAmountError('Please sign in to deposit.');
       return;
     }
 
+    const numAmount = parseFloat(amount);
+    let hasError = false;
+
+    if (isNaN(numAmount) || numAmount < 100) {
+      setAmountError('Deposit amount must be at least KSh 100.');
+      hasError = true;
+    } else {
+      setAmountError('');
+    }
+
+    if (!validatePhone(phone)) {
+      setPhoneError('Please enter a valid M-Pesa phone number (+254, 07, or 01 format).');
+      hasError = true;
+    } else {
+      setPhoneError('');
+    }
+
+    if (hasError) return;
+
+    const normalizedPhone = normalizePhone(phone);
     setDepositLoading(true);
     try {
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
         gamingEarnings: (userData?.gamingEarnings || 0) + numAmount,
+        phone: normalizedPhone,
         history: arrayUnion({
-          task: 'M-Pesa Deposit',
+          task: `M-Pesa Deposit (${normalizedPhone})`,
           reward: numAmount,
           date: new Date().toLocaleString(),
         }),
       });
-      console.log('Deposit initiated, amount:', numAmount, 'phone:', phone);
-      alert(`Deposit of KSh ${numAmount.toFixed(2)} via ${phone} initiated successfully!`);
-      navigate('/tasks', { replace: true });
+      console.log('Deposit initiated, amount:', numAmount, 'phone:', normalizedPhone);
+      setSuccessAmount(numAmount);
+      setSuccessPhone(normalizedPhone);
+      setShowSuccessModal(true);
     } catch (err) {
       console.error('Deposit error:', err);
-      setDepositError('Failed to process deposit. Please try again.');
+      setAmountError('Failed to process deposit. Please try again.');
     }
     setDepositLoading(false);
   };
@@ -61,6 +89,11 @@ const Deposit = () => {
     navigate(from, { replace: true });
   };
 
+  const isFormValid = () => {
+    const numAmount = parseFloat(amount);
+    return user && numAmount >= 100 && validatePhone(phone);
+  };
+
   return (
     <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4 pb-20">
       <div className="w-full max-w-md">
@@ -69,9 +102,6 @@ const Deposit = () => {
         </h5>
         <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-4">
           <p className="text-lg font-roboto">Enter the amount to deposit via M-Pesa</p>
-          {depositError && (
-            <p className="text-red-500 text-sm">{depositError}</p>
-          )}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-roboto mb-1">Amount (KSh)</label>
@@ -83,33 +113,39 @@ const Deposit = () => {
                 value={amount}
                 onChange={(e) => {
                   setAmount(e.target.value);
-                  setDepositError('');
+                  setAmountError('');
                 }}
                 className="w-full bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 focus:outline-none focus:ring-2 focus:ring-highlight"
               />
+              {amountError && (
+                <p className="text-red-500 text-sm font-roboto mt-1">{amountError}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-roboto mb-1">M-Pesa Phone Number</label>
               <input
                 type="tel"
-                placeholder="+2547XXXXXXXX or 07XXXXXXXX"
+                placeholder="+254XXXXXXXXX or 0XXXXXXXXX"
                 value={phone}
                 onChange={(e) => {
                   setPhone(e.target.value);
-                  setDepositError('');
+                  setPhoneError('');
                 }}
                 className="w-full bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 focus:outline-none focus:ring-2 focus:ring-highlight"
               />
+              {phoneError && (
+                <p className="text-red-500 text-sm font-roboto mt-1">{phoneError}</p>
+              )}
             </div>
           </div>
           <div className="flex justify-between gap-4 mt-4">
             <button
               onClick={handleDeposit}
-              disabled={depositLoading || !user || !amount || amount < 100 || !validatePhone(phone)}
-              className={`flex-1 bg-highlight text-white px-6 py-3 rounded-full font-roboto transition duration-300 flex items-center justify-center ${
-                depositLoading || !user || !amount || amount < 100 || !validatePhone(phone)
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'hover:bg-accent'
+              disabled={depositLoading || !isFormValid()}
+              className={`flex-1 text-white px-6 py-3 rounded-full font-roboto transition duration-300 flex items-center justify-center ${
+                depositLoading || !isFormValid()
+                  ? 'bg-highlight opacity-50 cursor-not-allowed'
+                  : 'bg-highlight-bright hover:bg-accent'
               }`}
             >
               <CurrencyDollarIcon className="w-5 h-5 mr-2" />
@@ -123,7 +159,49 @@ const Deposit = () => {
             </button>
           </div>
         </div>
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={() => {
+              setShowSuccessModal(false);
+              navigate('/tasks', { replace: true });
+            }}
+          >
+            <div
+              className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg animate-fade-in"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <CheckCircleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-primary font-roboto mb-4">Deposit Successful</h3>
+              <p className="text-primary font-roboto mb-4">
+                Deposit of KSh {successAmount.toFixed(2)} via {successPhone} initiated successfully!
+              </p>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  navigate('/tasks', { replace: true });
+                }}
+                className="bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+      <style jsx>{`
+        .bg-highlight-bright {
+          background-color: #34D1CC;
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 };

