@@ -1,37 +1,71 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { CurrencyDollarIcon, CheckCircleIcon } from '@heroicons/react/24/solid';
+import axios from 'axios';
 
 const Deposit = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, userData } = useContext(AuthContext);
   const [amount, setAmount] = useState('');
-  const [phone, setPhone] = useState(userData?.phone || '');
+  const [phone, setPhone] = useState(userData?.phone ? `0${userData.phone.slice(3)}` : '');
   const [amountError, setAmountError] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [depositLoading, setDepositLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successAmount, setSuccessAmount] = useState(0);
   const [successPhone, setSuccessPhone] = useState('');
+  const [transactionId, setTransactionId] = useState('');
+  const [clientReference, setClientReference] = useState('');
+  const [payheroReference, setPayheroReference] = useState('');
+
+  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
   const validatePhone = (phone) => {
+    if (!phone) return 'Phone number is required';
     const cleaned = phone.replace(/[^0-9+]/g, '');
-    return (
-      /^\+254\d{9}$/.test(cleaned) || // +254712345678
-      /^0[7|1]\d{8}$/.test(cleaned)  // 0712345678 or 0112345678
-    );
+    if (!/^(254[17]\d{8})$|^0[7|1]\d{8}$|^\+254[17]\d{8}$/.test(cleaned)) {
+      return 'Invalid phone number format. Use 07XXXXXXXX, 01XXXXXXXX, 254XXXXXXXXX, or +254XXXXXXXXX';
+    }
+    return '';
   };
 
   const normalizePhone = (phone) => {
     const cleaned = phone.replace(/[^0-9+]/g, '');
     if (/^0[7|1]\d{8}$/.test(cleaned)) {
-      return `+254${cleaned.slice(1)}`; // Convert 0712345678 or 0112345678 to +254712345678
+      return `254${cleaned.slice(1)}`;
     }
-    return cleaned; // Already in +254 format
+    if (/^\+254[17]\d{8}$/.test(cleaned)) {
+      return cleaned.slice(1);
+    }
+    return cleaned;
+  };
+
+  const generateReference = () => {
+    return `DEP-${user.uid}-${Date.now()}`;
+  };
+
+  const checkTransactionStatus = async (ref) => {
+    try {
+      console.log(`Checking transaction status - PayHero Reference: ${ref}`);
+      const response = await axios.get(`${apiUrl}/api/transaction-status`, {
+        params: { reference: ref },
+        timeout: 20000,
+      });
+      return response.data;
+    } catch (err) {
+      console.error('Transaction status check error:', err.message);
+      let errorMessage = 'Failed to check transaction status. Retrying...';
+      if (err.response?.status === 404) {
+        errorMessage = 'Transaction is being processed. Please wait...';
+      } else if (err.response?.status === 400) {
+        errorMessage = 'Invalid transaction reference. Please try again.';
+      }
+      return { success: false, error: errorMessage };
+    }
   };
 
   const handleDeposit = async () => {
@@ -50,8 +84,9 @@ const Deposit = () => {
       setAmountError('');
     }
 
-    if (!validatePhone(phone)) {
-      setPhoneError('Please enter a valid M-Pesa phone number (+254, 07, or 01 format).');
+    const phoneValidationError = validatePhone(phone);
+    if (phoneValidationError) {
+      setPhoneError(phoneValidationError);
       hasError = true;
     } else {
       setPhoneError('');
@@ -60,28 +95,85 @@ const Deposit = () => {
     if (hasError) return;
 
     const normalizedPhone = normalizePhone(phone);
+    const newClientReference = generateReference();
+    setClientReference(newClientReference);
     setDepositLoading(true);
+
     try {
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        gamingEarnings: (userData?.gamingEarnings || 0) + numAmount,
-        phone: normalizedPhone,
-        history: arrayUnion({
-          task: `M-Pesa Deposit (${normalizedPhone})`,
-          reward: numAmount,
-          date: new Date().toLocaleString(),
-        }),
-      });
-      console.log('Deposit initiated, amount:', numAmount, 'phone:', normalizedPhone);
-      setSuccessAmount(numAmount);
-      setSuccessPhone(normalizedPhone);
-      setShowSuccessModal(true);
+      console.log(`Sending STK Push - Phone: ${normalizedPhone}, Amount: ${numAmount}, Client Reference: ${newClientReference}`);
+      const response = await axios.post(
+        `${apiUrl}/api/stk-push`,
+        {
+          phoneNumber: normalizedPhone,
+          amount: numAmount,
+          reference: newClientReference,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000,
+        }
+      );
+
+      if (response.data.success) {
+        setTransactionId(response.data.payheroReference || newClientReference);
+        setPayheroReference(response.data.payheroReference || newClientReference);
+        console.log(`STK Push response - PayHero Reference: ${response.data.payheroReference}`);
+      } else {
+        throw new Error(response.data.error || 'STK Push initiation failed');
+      }
     } catch (err) {
-      console.error('Deposit error:', err);
-      setAmountError('Failed to process deposit. Please try again.');
+      console.error('Deposit error:', err.message);
+      setAmountError(err.response?.data?.error || 'Failed to initiate deposit. Please try again.');
+      setDepositLoading(false);
     }
-    setDepositLoading(false);
   };
+
+  useEffect(() => {
+    if (!depositLoading || !payheroReference) return;
+
+    const startTime = Date.now();
+    const maxPollingDuration = 300000; // 5 minutes
+
+    const pollStatus = async () => {
+      if (Date.now() - startTime > maxPollingDuration) {
+        setAmountError('Payment timed out. Please try again.');
+        setDepositLoading(false);
+        return;
+      }
+
+      const statusData = await checkTransactionStatus(payheroReference);
+      if (statusData.success) {
+        if (statusData.status === 'SUCCESS') {
+          const userRef = doc(db, 'users', user.uid);
+          const numAmount = parseFloat(amount);
+          await updateDoc(userRef, {
+            gamingEarnings: (userData?.gamingEarnings || 0) + numAmount,
+            phone: normalizePhone(phone),
+            history: arrayUnion({
+              task: `M-Pesa Deposit (${normalizePhone(phone)})`,
+              reward: numAmount,
+              date: new Date().toLocaleString(),
+              transactionId: transactionId,
+            }),
+          });
+          setSuccessAmount(numAmount);
+          setSuccessPhone(normalizePhone(phone));
+          setShowSuccessModal(true);
+          setDepositLoading(false);
+        } else if (statusData.status === 'FAILED' || statusData.status === 'CANCELLED') {
+          setAmountError(`Deposit ${statusData.status.toLowerCase()}. Please try again.`);
+          setDepositLoading(false);
+        } else if (statusData.status === 'QUEUED') {
+          setAmountError('Transaction is being processed. Please wait...');
+        }
+      } else {
+        setAmountError(statusData.error);
+      }
+    };
+
+    const pollInterval = setInterval(pollStatus, 5000);
+    return () => clearInterval(pollInterval);
+  }, [depositLoading, payheroReference, user, userData, amount, phone, transactionId]);
 
   const handleCancel = () => {
     const from = location.state?.from || '/tasks';
@@ -91,7 +183,7 @@ const Deposit = () => {
 
   const isFormValid = () => {
     const numAmount = parseFloat(amount);
-    return user && numAmount >= 100 && validatePhone(phone);
+    return user && numAmount >= 100 && validatePhone(phone) === '';
   };
 
   return (
@@ -125,7 +217,7 @@ const Deposit = () => {
               <label className="block text-sm font-roboto mb-1">M-Pesa Phone Number</label>
               <input
                 type="tel"
-                placeholder="+254XXXXXXXXX or 0XXXXXXXXX"
+                placeholder="07XXXXXXXX, 01XXXXXXXX, 254XXXXXXXXX, or +254XXXXXXXXX"
                 value={phone}
                 onChange={(e) => {
                   setPhone(e.target.value);
@@ -142,7 +234,7 @@ const Deposit = () => {
             <button
               onClick={handleDeposit}
               disabled={depositLoading || !isFormValid()}
-              className={`flex-1 text-white px-6 py-3 rounded-full font-roboto transition duration-300 flex items-center justify-center ${
+              className={`flex-1 text-white px-6 py-3 rounded-full font-roboto transition duration-300 flex items-center justify-center shadow-md hover:shadow-lg ${
                 depositLoading || !isFormValid()
                   ? 'bg-highlight opacity-50 cursor-not-allowed'
                   : 'bg-highlight-bright hover:bg-accent'
@@ -159,7 +251,6 @@ const Deposit = () => {
             </button>
           </div>
         </div>
-        {/* Success Modal */}
         {showSuccessModal && (
           <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -175,7 +266,7 @@ const Deposit = () => {
               <CheckCircleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
               <h3 className="text-lg font-bold text-primary font-roboto mb-4">Deposit Successful</h3>
               <p className="text-primary font-roboto mb-4">
-                Deposit of KSh {successAmount.toFixed(2)} via {successPhone} initiated successfully!
+                Deposit of KSh {successAmount.toFixed(2)} via {successPhone} (Transaction ID: {transactionId}) completed successfully!
               </p>
               <button
                 onClick={() => {
