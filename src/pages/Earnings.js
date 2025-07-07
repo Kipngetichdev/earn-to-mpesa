@@ -2,7 +2,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { doc, updateDoc, arrayUnion, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowUpIcon, ArrowDownIcon, WalletIcon } from '@heroicons/react/24/solid';
+import { ArrowUpIcon, ArrowDownIcon, WalletIcon,CurrencyDollarIcon } from '@heroicons/react/24/solid';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend } from 'chart.js';
 
@@ -293,20 +293,20 @@ const Earnings = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={() => setShowWithdrawModal(true)}
-              className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent hover:text-white flex items-center justify-center"
+              className="flex-1 bg-white text-primary px-4 py-4 rounded-lg font-roboto transition duration-300 hover:bg-accent hover:text-white flex items-center justify-center border border-secondary-300"
               disabled={totalBalance <= 0 || balanceLoading || authLoading}
             >
-              <ArrowUpIcon className="w-5 h-5 mr-2" />
-              Withdraw
+              <CurrencyDollarIcon className="w-5 h-5 mr-2" />
+              Withdraw to M-Pesa
             </button>
-            <button
+            {/* <button
               onClick={() => setShowDepositModal(true)}
               className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent hover:text-white flex items-center justify-center"
               disabled={balanceLoading || authLoading}
             >
               <ArrowDownIcon className="w-5 h-5 mr-2" />
               Deposit
-            </button>
+            </button> */}
           </div>
           {/* Earnings Chart */}
           <div className="bg-primary text-white p-6 rounded-lg shadow-inner">

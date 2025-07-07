@@ -467,54 +467,13 @@ const Home = () => {
   };
 
   const handleWithdrawal = async () => {
-    if (!user) {
-      setWithdrawalError('Please sign in to withdraw.');
-      return;
-    }
-    if (!localUserData?.phone) {
-      setWithdrawalError('M-Pesa phone number not found.');
-      return;
-    }
-    const totalBalance = (localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0);
-    if (totalBalance < 10) {
-      setWithdrawalError('Minimum withdrawal amount is KSh 10.');
-      return;
-    }
-
-    setWithdrawalLoading(true);
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      // Align with Earnings.jsx withdrawal logic
-      let newGamingEarnings = localUserData?.gamingEarnings || 0;
-      let newTaskEarnings = localUserData?.taskEarnings || 0;
-      if (totalBalance <= newGamingEarnings) {
-        newGamingEarnings -= totalBalance;
-      } else {
-        const remaining = totalBalance - newGamingEarnings;
-        newGamingEarnings = 0;
-        newTaskEarnings = Math.max(0, newTaskEarnings - remaining);
-      }
-      await updateDoc(userRef, {
-        gamingEarnings: newGamingEarnings,
-        taskEarnings: newTaskEarnings,
-        history: arrayUnion({
-          task: `M-Pesa Withdrawal (${localUserData.phone})`,
-          reward: -totalBalance,
-          date: new Date().toLocaleString(),
-        }),
-      });
-      alert(`Withdrawal of KSh ${totalBalance.toFixed(2)} to ${localUserData.phone} initiated successfully!`);
-    } catch (err) {
-      console.error('Withdrawal error:', err);
-      setWithdrawalError('Failed to process withdrawal. Please try again.');
-    }
-    setWithdrawalLoading(false);
+    navigate('/earnings');
   };
 
-  const handleDeposit = () => {
-    console.log('Navigating to /deposit from /home');
-    navigate('/deposit', { replace: true, state: { from: '/home' } });
-  };
+  // const handleDeposit = () => {
+  //   console.log('Navigating to /deposit from /home');
+  //   navigate('/deposit', { replace: true, state: { from: '/home' } });
+  // };
 
   return (
     <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4">

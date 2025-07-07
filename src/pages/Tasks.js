@@ -4,7 +4,7 @@ import { Wheel } from 'react-custom-roulette';
 import { AuthContext } from '../context/AuthContext';
 import { doc, updateDoc, arrayUnion, getDoc, runTransaction, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { CurrencyDollarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid';
+import { CurrencyDollarIcon, ExclamationTriangleIcon, CheckCircleIcon } from '@heroicons/react/24/solid';
 import surveyImage from '../assets/spin.png';
 import { usePlayerData } from '../services/playerData';
 
@@ -27,18 +27,21 @@ const Tasks = () => {
   const [phone, setPhone] = useState(userData?.phone || '');
   const [phoneError, setPhoneError] = useState('');
   const [balanceLoading, setBalanceLoading] = useState(true);
+  const [showSuccessModal, setShowSuccessModal] = useState(false); // New state for success modal
 
   const stakes = [20, 50, 100, 150, 200, 300];
 
   const data = [
-    { option: 'KSh 5.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
-    { option: 'KSh 105', style: { backgroundColor: '#FFE3BB', textColor: '#FF4F0F' } },
+    { option: 'KSh 0.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
+    { option: 'KSh 100', style: { backgroundColor: '#FFE3BB', textColor: '#FF4F0F' } },
     { option: 'KSh 150', style: { backgroundColor: '#FFA673', textColor: 'white' } },
-    { option: 'KSh 255', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
-    { option: 'KSh 280', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
-    { option: 'KSh 320', style: { backgroundColor: '#FFE3BB', textColor: '#FF4F0F' } },
-    { option: 'KSh 375', style: { backgroundColor: '#FFA673', textColor: 'white' } },
-    { option: 'KSh 450', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
+    { option: 'KSh 200', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
+    { option: 'KSh 250', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
+    { option: 'KSh 300', style: { backgroundColor: '#FFE3BB', textColor: '#FF4F0F' } },
+    { option: 'KSh 350', style: { backgroundColor: '#FFA673', textColor: 'white' } },
+    { option: 'KSh 400', style: { backgroundColor: '#FF4F0F', textColor: 'white' } },
+    { option: 'KSh 450', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
+    { option: 'KSh 500', style: { backgroundColor: '#FFE3BB', textColor: '#FF4F0F' } },
   ];
 
   // Sync localUserData with userData when it changes
@@ -116,6 +119,16 @@ const Tasks = () => {
     return () => unsubscribe(); // Cleanup listener
   }, [user, authLoading]);
 
+  // Auto-close success modal after 3 seconds
+  useEffect(() => {
+    if (showSuccessModal) {
+      const timer = setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccessModal]);
+
   const handleStakeSelect = (stake) => {
     setSelectedStake(stake);
     setStakeError('');
@@ -171,6 +184,7 @@ const Tasks = () => {
     }
 
     setStakeError('');
+    setReward(null); // Clear previous reward text
     try {
       const userRef = doc(db, 'users', user.uid);
       await runTransaction(db, async (transaction) => {
@@ -236,49 +250,7 @@ const Tasks = () => {
   };
 
   const handleWithdrawal = async () => {
-    if (!user) {
-      setWithdrawalError('Please sign in to withdraw.');
-      return;
-    }
-    if (!localUserData?.phone) {
-      setWithdrawalError('M-Pesa phone number not found.');
-      return;
-    }
-    const totalBalance = (localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0);
-    if (totalBalance < 10) {
-      setWithdrawalError('Minimum withdrawal amount is KSh 10.');
-      return;
-    }
-
-    setWithdrawalLoading(true);
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-      const currentData = userSnap.exists() ? userSnap.data() : {};
-      let newGamingEarnings = currentData.gamingEarnings || 0;
-      let newTaskEarnings = currentData.taskEarnings || 0;
-      if (totalBalance <= newGamingEarnings) {
-        newGamingEarnings -= totalBalance;
-      } else {
-        const remaining = totalBalance - newGamingEarnings;
-        newGamingEarnings = 0;
-        newTaskEarnings = Math.max(0, newTaskEarnings - remaining);
-      }
-      await updateDoc(userRef, {
-        gamingEarnings: newGamingEarnings,
-        taskEarnings: newTaskEarnings,
-        history: arrayUnion({
-          task: `M-Pesa Withdrawal (${localUserData.phone})`,
-          reward: -totalBalance,
-          date: new Date().toLocaleString(),
-        }),
-      });
-      alert(`Withdrawal of KSh ${totalBalance.toFixed(2)} to ${localUserData.phone} initiated successfully!`);
-    } catch (err) {
-      console.error('Withdrawal error:', err);
-      setWithdrawalError('Failed to process withdrawal. Please try again.');
-    }
-    setWithdrawalLoading(false);
+    navigate('/earnings');
   };
 
   const handleDeposit = () => {
@@ -330,7 +302,7 @@ const Tasks = () => {
       });
       setIsBettingAccountActive(true);
       setShowActivationModal(false);
-      alert('Betting account activated successfully! You can now spin and withdraw instantly.');
+      setShowSuccessModal(true); // Show success modal
     } catch (err) {
       console.error('Activation error:', err);
       setActivationError('Failed to activate account. Please try again.');
@@ -359,7 +331,7 @@ const Tasks = () => {
                 />
                 <div className="flex flex-col flex-grow">
                   <p className="text-lg font-roboto">
-                    Spin to Win for a chance to earn up to KSh 450!
+                    Spin to Win for a chance to earn up to KSh 500!
                   </p>
                 </div>
               </div>
@@ -417,9 +389,9 @@ const Tasks = () => {
             spinDuration={0.6}
           />
         </div>
-        {reward && (
+        {reward !== null && (
           <p className="text-xl text-highlight font-roboto mt-4">
-            You won KSh {reward.toFixed(2)}!
+            {reward === 0 ? 'No win this time!' : `You won KSh ${reward.toFixed(2)}!`}
           </p>
         )}
         {stakeError && (
@@ -489,8 +461,19 @@ const Tasks = () => {
         </div>
         {/* Activation Modal */}
         {showActivationModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => {}}>
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg">
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={() => {
+              setShowActivationModal(false);
+              setPhone(localUserData?.phone || '');
+              setActivationError('');
+              setPhoneError('');
+            }}
+          >
+            <div
+              className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg animate-fade-in"
+              onClick={(e) => e.stopPropagation()}
+            >
               <ExclamationTriangleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
               <h2 className="text-lg font-bold text-primary font-roboto mb-4">
                 Activate Your Betting Account
@@ -526,11 +509,57 @@ const Tasks = () => {
                 >
                   {activationLoading ? 'Processing...' : 'Activate Now (KSh 150)'}
                 </button>
+                <button
+                  onClick={() => {
+                    setShowActivationModal(false);
+                    setPhone(localUserData?.phone || '');
+                    setActivationError('');
+                    setPhoneError('');
+                  }}
+                  className="bg-gray-200 text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
         )}
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={() => setShowSuccessModal(false)}
+          >
+            <div
+              className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg animate-fade-in"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <CheckCircleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
+              <h2 className="text-lg font-bold text-primary font-roboto mb-4">
+                Betting Account Activated!
+              </h2>
+              <p className="text-primary font-roboto mb-4">
+                Your betting account is now active. You can spin and withdraw instantly!
+              </p>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+      <style jsx>{`
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 };
