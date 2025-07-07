@@ -20,7 +20,7 @@ const UpgradeAccount = ({ isOpen, onClose, tier, user }) => {
 
   const fee = tier === 'standard' ? 150 : 200;
   const message = `one-time fee KSh ${fee}. No additional charges.`;
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+  const apiUrl = process.env.REACT_APP_API_URL || 'https://earn-to-mpesa.vercel.app';
 
   // Validate Kenyan phone number: +254[0-9]{9}, 07[0-9]{8}, or 01[0-9]{8}
   const validatePhoneNumber = (phone) => {

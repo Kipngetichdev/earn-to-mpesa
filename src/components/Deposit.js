@@ -22,7 +22,7 @@ const Deposit = () => {
   const [clientReference, setClientReference] = useState('');
   const [payheroReference, setPayheroReference] = useState('');
 
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+  const apiUrl = process.env.REACT_APP_API_URL || 'https://earn-to-mpesa.vercel.app';
 
   const validatePhone = (phone) => {
     if (!phone) return 'Phone number is required';
