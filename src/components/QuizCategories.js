@@ -33,6 +33,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
   const [showModal, setShowModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [disabledCategories, setDisabledCategories] = useState({});
+  const [categoryCooldowns, setCategoryCooldowns] = useState({});
   const navigate = useNavigate();
 
   // Log props for debugging
@@ -157,7 +158,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
       }
 
       setCategories(selectedCategories);
-      console.log('QuizCategories fetched categories:', selectedCategories); // Debug
+      console.log('QuizCategories fetched categories:', selectedCategories);
     } catch (err) {
       setError('Failed to fetch categories.');
       console.error('QuizCategories fetch categories error:', err);
@@ -165,7 +166,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
     setLoading(false);
   };
 
-  // Fetch user history to determine disabled categories
+  // Fetch user history to determine disabled categories and their cooldown times
   const fetchUserHistory = async () => {
     if (user) {
       try {
@@ -174,17 +175,21 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
           const history = userDoc.data().history || [];
           const now = new Date();
           const disabled = {};
+          const cooldowns = {};
           history.forEach(({ categoryId, completedAt }) => {
             if (completedAt) {
-              const completedTime = new Date(completedAt); // Parse ISO string
-              const diffMinutes = (now - completedTime) / (1000 * 60);
-              if (diffMinutes < 120) { // 2 hours = 120 minutes
+              const completedTime = new Date(completedAt);
+              const diffSeconds = (now - completedTime) / 1000;
+              const cooldownDuration = 5 * 60; // 5 minutes in seconds
+              if (diffSeconds < cooldownDuration) {
                 disabled[categoryId] = true;
+                cooldowns[categoryId] = Math.ceil(cooldownDuration - diffSeconds);
               }
             }
           });
           setDisabledCategories(disabled);
-          console.log('QuizCategories disabled categories:', disabled); // Debug
+          setCategoryCooldowns(cooldowns);
+          console.log('QuizCategories disabled categories:', disabled, 'cooldowns:', cooldowns);
         }
       } catch (err) {
         console.error('QuizCategories fetch user history error:', err);
@@ -192,13 +197,46 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
     }
   };
 
+  // Format remaining time as MM:SS
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  // Update countdown timers every second
+  useEffect(() => {
+    if (Object.keys(categoryCooldowns).length === 0) return;
+
+    const timer = setInterval(() => {
+      setCategoryCooldowns((prev) => {
+        const updated = { ...prev };
+        const now = new Date();
+        Object.keys(updated).forEach((categoryId) => {
+          const remainingSeconds = updated[categoryId] - 1;
+          if (remainingSeconds <= 0) {
+            delete updated[categoryId];
+            setDisabledCategories((prevDisabled) => {
+              const newDisabled = { ...prevDisabled };
+              delete newDisabled[categoryId];
+              console.log('QuizCategories enabled category:', categoryId);
+              return newDisabled;
+            });
+          } else {
+            updated[categoryId] = remainingSeconds;
+          }
+        });
+        console.log('QuizCategories updated cooldowns:', updated);
+        return updated;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [categoryCooldowns]);
+
   // Handle Start Survey button click
   const handleStartSurvey = (category) => {
-    console.log('QuizCategories handleStartSurvey:', { effectivePlan, categoryTier: category.tier }); // Debug
-    // Access logic:
-    // - Free plan: only Free categories accessible
-    // - Standard plan: Free and Standard categories accessible
-    // - Premium plan: Free, Standard, and Premium categories accessible
+    console.log('QuizCategories handleStartSurvey:', { effectivePlan, categoryTier: category.tier });
     const isAccessible =
       effectivePlan === 'premium' ||
       (effectivePlan === 'standard' && (category.tier === 'free' || category.tier === 'standard')) ||
@@ -207,11 +245,11 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
     if (!isAccessible) {
       setSelectedTier(category.tier);
       setIsModalOpen(true);
-      console.log('QuizCategories opening upgrade modal for tier:', category.tier); // Debug
+      console.log('QuizCategories opening upgrade modal for tier:', category.tier);
     } else {
       setSelectedCategory(category);
       setShowModal(true);
-      console.log('QuizCategories opening instruction modal for category:', category.name); // Debug
+      console.log('QuizCategories opening instruction modal for category:', category.name);
     }
   };
 
@@ -221,7 +259,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
       localStorage.setItem(`${selectedCategory.id}_reward`, selectedCategory.reward);
       navigate(`/home/${selectedCategory.id}`);
       setShowModal(false);
-      console.log('QuizCategories navigating to tasks:', selectedCategory.id); // Debug
+      console.log('QuizCategories navigating to tasks:', selectedCategory.id);
     }
   };
 
@@ -243,13 +281,12 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
         <div className="mb-4 overflow-y-auto space-y-2">
           {categories.map((category) => {
             const Icon = iconMap[category.name] || UserGroupIcon;
-            // Show lock icon if category is not accessible
             const showLockIcon =
               (effectivePlan === 'free' && (category.tier === 'standard' || category.tier === 'premium')) ||
               (effectivePlan === 'standard' && category.tier === 'premium');
-            // Check if category is disabled
             const isDisabled = disabledCategories[category.id];
-            console.log('QuizCategories Category:', category.name, 'Tier:', category.tier, 'Show lock:', showLockIcon, 'Disabled:', isDisabled); // Debug
+            const remainingTime = categoryCooldowns[category.id];
+            console.log('QuizCategories Category:', category.name, 'Tier:', category.tier, 'Show lock:', showLockIcon, 'Disabled:', isDisabled, 'Remaining:', remainingTime);
             return (
               <div
                 key={category.id}
@@ -275,7 +312,9 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
                     Start Survey
                   </button>
                   {isDisabled && (
-                    <p className="text-sm text-gray-500 font-roboto mt-1">Available again in 5Mins</p>
+                    <p className="text-sm text-gray-500 font-roboto mt-1">
+                      Available again in {formatTime(remainingTime)}
+                    </p>
                   )}
                 </div>
               </div>
@@ -306,7 +345,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
                 className="bg-white border border-primary text-primary px-4 py-2 rounded hover:bg-secondary font-roboto transition duration-300"
                 onClick={() => {
                   setShowModal(false);
-                  console.log('QuizCategories instruction modal closed'); // Debug
+                  console.log('QuizCategories instruction modal closed');
                 }}
               >
                 Cancel
@@ -319,7 +358,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
-          console.log('QuizCategories upgrade modal closed'); // Debug
+          console.log('QuizCategories upgrade modal closed');
         }}
         tier={selectedTier}
         user={user}
