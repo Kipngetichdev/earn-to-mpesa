@@ -7,17 +7,18 @@ import { db } from '../services/firebase';
 import { CurrencyDollarIcon, ExclamationTriangleIcon, CheckCircleIcon } from '@heroicons/react/24/solid';
 import surveyImage from '../assets/spin.png';
 import { usePlayerData } from '../services/playerData';
+import axios from 'axios';
 
 const Tasks = () => {
   const navigate = useNavigate();
   const { user, userData, loading: authLoading } = useContext(AuthContext);
-  const [localUserData, setLocalUserData] = useState(userData); // Local state for Firestore data
+  const [localUserData, setLocalUserData] = useState(userData);
   const [mustSpin, setMustSpin] = useState(false);
   const [prizeNumber, setPrizeNumber] = useState(0);
   const [reward, setReward] = useState(null);
   const [withdrawalError, setWithdrawalError] = useState('');
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
-  const [selectedStake, setSelectedStake] = useState(20); // Default stake: KSh 20
+  const [selectedStake, setSelectedStake] = useState(20);
   const [stakeError, setStakeError] = useState('');
   const [spinCount, setSpinCount] = useState(0);
   const [isBettingAccountActive, setIsBettingAccountActive] = useState(false);
@@ -27,9 +28,13 @@ const Tasks = () => {
   const [phone, setPhone] = useState(userData?.phone || '');
   const [phoneError, setPhoneError] = useState('');
   const [balanceLoading, setBalanceLoading] = useState(true);
-  const [showSuccessModal, setShowSuccessModal] = useState(false); // New state for success modal
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [clientReference, setClientReference] = useState('');
+  const [payheroReference, setPayheroReference] = useState('');
+  const [transactionId, setTransactionId] = useState('');
 
   const stakes = [20, 50, 100, 150, 200, 300];
+  const apiUrl = process.env.REACT_APP_API_URL || 'https://earn-to-mpesa.vercel.app';
 
   const data = [
     { option: 'KSh 0.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
@@ -44,7 +49,7 @@ const Tasks = () => {
     { option: 'KSh 500', style: { backgroundColor: '#FFE3BB', textColor: '#FF4F0F' } },
   ];
 
-  // Sync localUserData with userData when it changes
+  // Sync localUserData with userData
   useEffect(() => {
     setLocalUserData(userData);
     if (!authLoading && userData) {
@@ -64,24 +69,23 @@ const Tasks = () => {
     }
 
     const userRef = doc(db, 'users', user.uid);
-    // Initial fetch
     const fetchUserData = async () => {
       try {
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
           const data = userSnap.data();
-          setLocalUserData(data); // Update local state
+          setLocalUserData(data);
           setSpinCount(data.spinCount || 0);
           setIsBettingAccountActive(data.isBettingAccountActive || false);
-          setPhone(data.phone || '');
+          setPhone(data.phone ? (data.phone.startsWith('254') ? `0${data.phone.slice(3)}` : data.phone) : '');
           if (data.spinCount >= 3 && !data.isBettingAccountActive) {
             setShowActivationModal(true);
           }
-          console.log('Tasks fetched user data:', { 
-            gamingEarnings: data.gamingEarnings, 
+          console.log('Tasks fetched user data:', {
+            gamingEarnings: data.gamingEarnings,
             taskEarnings: data.taskEarnings,
-            spinCount: data.spinCount, 
-            isBettingAccountActive: data.isBettingAccountActive 
+            spinCount: data.spinCount,
+            isBettingAccountActive: data.isBettingAccountActive,
           });
           setBalanceLoading(false);
         }
@@ -91,22 +95,21 @@ const Tasks = () => {
       }
     };
 
-    // Real-time listener
     const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        setLocalUserData(data); // Update local state
+        setLocalUserData(data);
         setSpinCount(data.spinCount || 0);
         setIsBettingAccountActive(data.isBettingAccountActive || false);
-        setPhone(data.phone || '');
+        setPhone(data.phone ? (data.phone.startsWith('254') ? `0${data.phone.slice(3)}` : data.phone) : '');
         if (data.spinCount >= 3 && !data.isBettingAccountActive) {
           setShowActivationModal(true);
         }
-        console.log('Tasks onSnapshot user data:', { 
-          gamingEarnings: data.gamingEarnings, 
+        console.log('Tasks onSnapshot user data:', {
+          gamingEarnings: data.gamingEarnings,
           taskEarnings: data.taskEarnings,
-          spinCount: data.spinCount, 
-          isBettingAccountActive: data.isBettingAccountActive 
+          spinCount: data.spinCount,
+          isBettingAccountActive: data.isBettingAccountActive,
         });
         setBalanceLoading(false);
       }
@@ -115,8 +118,8 @@ const Tasks = () => {
       setBalanceLoading(false);
     });
 
-    fetchUserData(); // Initial fetch
-    return () => unsubscribe(); // Cleanup listener
+    fetchUserData();
+    return () => unsubscribe();
   }, [user, authLoading]);
 
   // Auto-close success modal after 3 seconds
@@ -129,6 +132,51 @@ const Tasks = () => {
     }
   }, [showSuccessModal]);
 
+  // Validate phone number
+  const validatePhoneNumber = (phone) => {
+    const regex = /^(\+254[7|1]\d{8}|0[7|1]\d{8})$/;
+    return regex.test(phone);
+  };
+
+  // Normalize phone number to 254 format
+  const normalizePhoneNumber = (phone) => {
+    if (!phone) return phone;
+    const cleaned = phone.replace(/[^0-9+]/g, '');
+    if (/^0[7|1]\d{8}$/.test(cleaned)) {
+      return `254${cleaned.slice(1)}`;
+    }
+    if (/^\+254[7|1]\d{8}$/.test(cleaned)) {
+      return cleaned.slice(1);
+    }
+    return cleaned;
+  };
+
+  // Generate client reference
+  const generateReference = () => {
+    return `ACT-${user.uid}-${Date.now()}`;
+  };
+
+  // Check transaction status
+  const checkTransactionStatus = async (ref) => {
+    try {
+      console.log(`Checking transaction status - PayHero Reference: ${ref}`);
+      const response = await axios.get(`${apiUrl}/api/transaction-status`, {
+        params: { reference: ref },
+        timeout: 20000,
+      });
+      return response.data;
+    } catch (err) {
+      console.error('Transaction status check error:', err.message);
+      let errorMessage = 'Failed to check transaction status. Retrying...';
+      if (err.response?.status === 404) {
+        errorMessage = 'Transaction is being processed. Please wait...';
+      } else if (err.response?.status === 400) {
+        errorMessage = 'Invalid transaction reference. Please try again.';
+      }
+      return { success: false, error: errorMessage };
+    }
+  };
+
   const handleStakeSelect = (stake) => {
     setSelectedStake(stake);
     setStakeError('');
@@ -137,7 +185,7 @@ const Tasks = () => {
   const handleStakeInput = (e) => {
     const value = e.target.value;
     if (value === '') {
-      setSelectedStake(20); // Revert to default
+      setSelectedStake(20);
       setStakeError('');
       return;
     }
@@ -152,11 +200,11 @@ const Tasks = () => {
   };
 
   const handlePhoneInput = (e) => {
-    const value = e.target.value;
+    const value = e.target.value.replace(/[^0-9+]/g, '');
     setPhone(value);
-    // Validate Kenyan phone number (+2547XXXXXXXX or 07XXXXXXXX)
-    const phoneRegex = /^(\+2547\d{8}|07\d{8})$/;
-    if (!phoneRegex.test(value)) {
+    if (!value) {
+      setPhoneError('Phone number is required.');
+    } else if (!validatePhoneNumber(value)) {
       setPhoneError('Please enter a valid Kenyan phone number (e.g., +2547XXXXXXXX or 07XXXXXXXX).');
     } else {
       setPhoneError('');
@@ -184,7 +232,7 @@ const Tasks = () => {
     }
 
     setStakeError('');
-    setReward(null); // Clear previous reward text
+    setReward(null);
     try {
       const userRef = doc(db, 'users', user.uid);
       await runTransaction(db, async (transaction) => {
@@ -267,48 +315,92 @@ const Tasks = () => {
       setActivationError('Please enter a phone number.');
       return;
     }
-    const phoneRegex = /^(\+2547\d{8}|07\d{8})$/;
-    if (!phoneRegex.test(phone)) {
+    if (!validatePhoneNumber(phone)) {
       setActivationError('Please enter a valid Kenyan phone number (e.g., +2547XXXXXXXX or 07XXXXXXXX).');
-      return;
-    }
-    const totalBalance = (localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0);
-    if (totalBalance < 150) {
-      setActivationError('Insufficient balance to activate (KSh 150 required). Please deposit.');
       return;
     }
 
     setActivationLoading(true);
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-      const currentData = userSnap.exists() ? userSnap.data() : {};
-      const newGamingEarnings = Math.max(0, (currentData.gamingEarnings || 0) - 150);
-      const newTaskEarnings =
-        newGamingEarnings === 0 && 150 > (currentData.gamingEarnings || 0)
-          ? Math.max(0, (currentData.taskEarnings || 0) - (150 - (currentData.gamingEarnings || 0)))
-          : currentData.taskEarnings || 0;
+    const normalizedPhone = normalizePhoneNumber(phone);
+    const newClientReference = generateReference();
+    setClientReference(newClientReference);
 
-      await updateDoc(userRef, {
-        gamingEarnings: newGamingEarnings,
-        taskEarnings: newTaskEarnings,
-        isBettingAccountActive: true,
-        phone: phone, // Update phone number in Firestore
-        history: arrayUnion({
-          task: 'Account Activation',
-          reward: -150,
-          date: new Date().toLocaleString(),
-        }),
-      });
-      setIsBettingAccountActive(true);
-      setShowActivationModal(false);
-      setShowSuccessModal(true); // Show success modal
+    try {
+      console.log(`Sending STK Push - Phone: ${normalizedPhone}, Amount: 150, Client Reference: ${newClientReference}`);
+      const response = await axios.post(
+        `${apiUrl}/api/stk-push`,
+        {
+          phoneNumber: normalizedPhone,
+          amount: 150,
+          reference: newClientReference,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000,
+        }
+      );
+
+      if (response.data.success) {
+        setTransactionId(response.data.payheroReference || newClientReference);
+        setPayheroReference(response.data.payheroReference || newClientReference);
+        console.log(`STK Push response - PayHero Reference: ${response.data.payheroReference}`);
+      } else {
+        throw new Error(response.data.error || 'STK Push initiation failed');
+      }
     } catch (err) {
-      console.error('Activation error:', err);
-      setActivationError('Failed to activate account. Please try again.');
+      console.error('Activation payment error:', err.message);
+      setActivationError(err.response?.data?.error || 'Failed to initiate payment. Please try again.');
+      setActivationLoading(false);
     }
-    setActivationLoading(false);
   };
+
+  // Poll transaction status
+  useEffect(() => {
+    if (!activationLoading || !payheroReference) return;
+
+    const startTime = Date.now();
+    const maxPollingDuration = 300000; // 5 minutes
+
+    const pollStatus = async () => {
+      if (Date.now() - startTime > maxPollingDuration) {
+        setActivationError('Payment timed out. Please try again.');
+        setActivationLoading(false);
+        return;
+      }
+
+      const statusData = await checkTransactionStatus(payheroReference);
+      if (statusData.success) {
+        if (statusData.status === 'SUCCESS') {
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, {
+            isBettingAccountActive: true,
+            phone: normalizePhoneNumber(phone),
+            history: arrayUnion({
+              task: `Account Activation (${normalizePhoneNumber(phone)})`,
+              reward: -150,
+              date: new Date().toLocaleString(),
+              transactionId: transactionId,
+            }),
+          });
+          setIsBettingAccountActive(true);
+          setShowActivationModal(false);
+          setShowSuccessModal(true);
+          setActivationLoading(false);
+          console.log('Activation payment successful, Firestore updated');
+        } else if (statusData.status === 'FAILED' || statusData.status === 'CANCELLED') {
+          setActivationError(`Payment ${statusData.status.toLowerCase()}. Please try again.`);
+          setActivationLoading(false);
+        } else if (statusData.status === 'QUEUED') {
+          setActivationError('Transaction is being processed. Please wait...');
+        }
+      } else {
+        setActivationError(statusData.error);
+      }
+    };
+
+    const pollInterval = setInterval(pollStatus, 5000);
+    return () => clearInterval(pollInterval);
+  }, [activationLoading, payheroReference, user, phone, transactionId]);
 
   const players = usePlayerData();
 
@@ -465,9 +557,11 @@ const Tasks = () => {
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
             onClick={() => {
               setShowActivationModal(false);
-              setPhone(localUserData?.phone || '');
+              setPhone(localUserData?.phone ? `0${localUserData.phone.slice(3)}` : '');
               setActivationError('');
               setPhoneError('');
+              setClientReference('');
+              setPayheroReference('');
             }}
           >
             <div
@@ -494,15 +588,18 @@ const Tasks = () => {
                   value={phone}
                   onChange={handlePhoneInput}
                   placeholder="e.g., +2547XXXXXXXX or 07XXXXXXXX"
-                  className="w-full bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 focus:outline-none focus:ring-2 focus:ring-highlight"
+                  disabled={activationLoading}
+                  className={`w-full bg-white text-primary px-3 py-2 rounded-lg font-roboto transition duration-300 focus:outline-none focus:ring-2 focus:ring-highlight ${
+                    activationLoading ? 'bg-gray-100 cursor-not-allowed' : ''
+                  }`}
                 />
               </div>
               <div className="flex justify-center gap-4">
                 <button
                   onClick={handleActivation}
-                  disabled={activationLoading || !user || phoneError || !phone || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 150}
+                  disabled={activationLoading || !user || phoneError || !phone}
                   className={`bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center ${
-                    activationLoading || !user || phoneError || !phone || ((localUserData?.gamingEarnings || 0) + (localUserData?.taskEarnings || 0)) < 150
+                    activationLoading || !user || phoneError || !phone
                       ? 'opacity-50 cursor-not-allowed'
                       : 'hover:bg-accent'
                   }`}
@@ -512,11 +609,16 @@ const Tasks = () => {
                 <button
                   onClick={() => {
                     setShowActivationModal(false);
-                    setPhone(localUserData?.phone || '');
+                    setPhone(localUserData?.phone ? `0${localUserData.phone.slice(3)}` : '');
                     setActivationError('');
                     setPhoneError('');
+                    setClientReference('');
+                    setPayheroReference('');
                   }}
-                  className="bg-gray-200 text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-gray-300"
+                  disabled={activationLoading}
+                  className={`bg-gray-200 text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 ${
+                    activationLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-300'
+                  }`}
                 >
                   Cancel
                 </button>
@@ -539,7 +641,7 @@ const Tasks = () => {
                 Betting Account Activated!
               </h2>
               <p className="text-primary font-roboto mb-4">
-                Your betting account is now active. You can spin and withdraw instantly!
+                Payment of KSh 150.00 via {normalizePhoneNumber(phone)} (Transaction ID: {transactionId}) completed successfully! You can now spin and withdraw instantly.
               </p>
               <button
                 onClick={() => setShowSuccessModal(false)}
