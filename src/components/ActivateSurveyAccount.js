@@ -92,7 +92,7 @@ const ActivateSurveyAccount = ({ isOpen, onClose }) => {
         `${apiUrl}/api/stk-push`,
         {
           phoneNumber: normalizedPhone,
-          amount: 1,
+          amount: 100,
           reference: newClientReference,
         },
         {
