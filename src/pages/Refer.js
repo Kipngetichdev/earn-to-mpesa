@@ -15,7 +15,7 @@ const Refer = ({ completeTask }) => {
   const [loading, setLoading] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showFAQs, setShowFAQs] = useState(false);
-  const shareLink = user && user.uid ? `https://earn-to-mpesa.vercel.app/signup?ref=${user.uid}` : '';
+  const shareLink = user && user.uid ? `https://earn-to-mpesa-online.vercel.app/signup?ref=${user.uid}` : '';
 
   useEffect(() => {
     let cancelled = false;

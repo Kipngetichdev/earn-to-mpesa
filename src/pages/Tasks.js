@@ -34,7 +34,7 @@ const Tasks = () => {
   const [transactionId, setTransactionId] = useState('');
 
   const stakes = [20, 50, 100, 150, 200, 300];
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+  const apiUrl = process.env.REACT_APP_API_URL || 'https://earn-to-mpesa-online.vercel.app';
 
   const data = [
     { option: 'KSh 0.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
