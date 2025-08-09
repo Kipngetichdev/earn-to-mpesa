@@ -39,8 +39,10 @@ export const signup = async ({ username, email, password, phone }) => {
       password: hashedPassword,
       gamingEarnings: 0,
       taskEarnings: 0,
-      spinCount: 0, // Initialize spin count
-      isBettingAccountActive: false, // Initialize betting account status
+      spinCount: 0,
+      isBettingAccountActive: false,
+      isSurveyAccountActivated: false,
+      hasUserClaimedReward: false, // Initialize bonus reward status
       history: [],
       createdAt: new Date().toISOString(),
       userCollectedReward: false,

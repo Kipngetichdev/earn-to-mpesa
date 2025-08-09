@@ -22,10 +22,13 @@ import {
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { doc, updateDoc, arrayUnion, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import QuizCategories from '../components/QuizCategories';
 import UpgradeAccount from '../components/UpgradeAccount';
+import ActivateSurveyAccount from '../components/ActivateSurveyAccount';
+import UserBonusReward from '../components/UserBonusReward';
+import { getUserData } from '../services/auth';
 import surveyImage from '../assets/survey.png';
 
 const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
@@ -37,6 +40,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
   const [showModal, setShowModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [disabledCategories, setDisabledCategories] = useState({});
+  const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
   const navigate = useNavigate();
 
   // Log props for debugging
@@ -185,7 +189,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
             if (completedAt) {
               const completedTime = new Date(completedAt); // Parse ISO string
               const diffMinutes = (now - completedTime) / (1000 * 60);
-              if (diffMinutes < 5) { // 2 hours = 120 minutes// updated to 5 mins
+              if (diffMinutes < 5) { // 5 minutes cooldown
                 disabled[categoryId] = true;
               }
             }
@@ -200,8 +204,26 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
   };
 
   // Handle Start Survey button click
-  const handleStartSurvey = (category) => {
+  const handleStartSurvey = async (category) => {
     console.log('BottomSheet handleStartSurvey:', { effectivePlan, categoryTier: category.tier, isModalOpen }); // Debug
+    if (user) {
+      try {
+        const { data } = await getUserData(user.uid);
+        if (!data.isSurveyAccountActivated) {
+          setIsActivateModalOpen(true);
+          console.log('BottomSheet opening activate survey modal');
+          return;
+        }
+      } catch (err) {
+        console.error('BottomSheet fetch user data error:', err);
+        setError('Failed to verify survey account status. Please try again.');
+        return;
+      }
+    } else {
+      setError('Please sign in to start a survey.');
+      return;
+    }
+
     // Access logic: 
     // - Free plan: only Free categories accessible
     // - Standard plan: Free and Standard categories accessible
@@ -248,7 +270,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
       <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-lg max-w-md mx-auto p-6 max-h-[80vh] overflow-y-auto z-50 animate-slide-up">
         <div className="flex justify-between items-center mb-4">
           <h4 className="text-lg font-bold text-primary font-roboto">All Survey Categories</h4>
-          <button onClick={onClose}>
+          <button onClick={onClose} aria-label="Close bottom sheet">
             <XMarkIcon className="h-6 w-6 text-primary" />
           </button>
         </div>
@@ -294,6 +316,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
                             }`}
                             onClick={() => handleStartSurvey(category)}
                             disabled={isDisabled}
+                            aria-label={`Start ${category.name} survey`}
                           >
                             {showLockIcon && !isDisabled && <LockClosedIcon className="h-4 w-4 mr-2" />}
                             Start Survey
@@ -322,6 +345,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
                 <button
                   className="bg-highlight text-white px-4 py-2 rounded hover:bg-accent font-roboto transition duration-300"
                   onClick={handleContinue}
+                  aria-label={`Continue to ${selectedCategory.name} quiz`}
                 >
                   Continue
                 </button>
@@ -331,6 +355,7 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
                     setShowModal(false);
                     console.log('BottomSheet instruction modal closed'); // Debug
                   }}
+                  aria-label="Cancel quiz"
                 >
                   Cancel
                 </button>
@@ -346,6 +371,13 @@ const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
           }}
           tier={selectedTier}
           user={user}
+        />
+        <ActivateSurveyAccount
+          isOpen={isActivateModalOpen}
+          onClose={() => {
+            setIsActivateModalOpen(false);
+            console.log('BottomSheet activate survey modal closed'); // Debug
+          }}
         />
       </div>
       <style jsx>{`
@@ -405,7 +437,7 @@ const Home = () => {
         }
       } catch (err) {
         console.error('Home fetch userData error:', err);
-        setBalanceLoading(false);
+        setWithdrawalError('Failed to load user data. Please try again.');
       }
     };
 
@@ -419,7 +451,7 @@ const Home = () => {
       }
     }, (err) => {
       console.error('Home onSnapshot error:', err);
-      setBalanceLoading(false);
+      setWithdrawalError('Failed to sync user data. Please refresh.');
     });
 
     fetchUserData(); // Initial fetch
@@ -440,6 +472,7 @@ const Home = () => {
           }
         } catch (err) {
           console.error('Home fetch userCollectedReward error:', err);
+          setWithdrawalError('Failed to check reward status. Please try again.');
         }
       }
     };
@@ -470,11 +503,6 @@ const Home = () => {
     navigate('/earnings');
   };
 
-  // const handleDeposit = () => {
-  //   console.log('Navigating to /deposit from /home');
-  //   navigate('/deposit', { replace: true, state: { from: '/home' } });
-  // };
-
   return (
     <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4">
       <div className="w-full max-w-md">
@@ -499,7 +527,7 @@ const Home = () => {
                 </div>
               </div>
               <p className="text-lg font-roboto">
-                Gaming Earnings: KSh {localUserData?.gamingEarnings ? localUserData.gamingEarnings.toFixed(2) : '0.00'}
+                Gaming & Rewards: KSh {localUserData?.gamingEarnings ? localUserData.gamingEarnings.toFixed(2) : '0.00'}
               </p>
               <p className="text-lg font-roboto">
                 Tasks Earnings: KSh {localUserData?.taskEarnings ? localUserData.taskEarnings.toFixed(2) : '0.00'}
@@ -519,26 +547,25 @@ const Home = () => {
                       ? 'opacity-50 cursor-not-allowed'
                       : 'hover:bg-accent hover:text-white'
                   }`}
+                  aria-label="Withdraw to M-Pesa"
                 >
                   <CurrencyDollarIcon className="w-5 h-5 mr-2" />
                   {withdrawalLoading ? 'Processing...' : 'Withdraw to M-Pesa'}
                 </button>
-                {/* <button
-                  onClick={handleDeposit}
-                  className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 flex items-center justify-center hover:bg-accent hover:text-white"
-                >
-                  <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-                  Deposit
-                </button> */}
               </div>
             </>
           )}
+        </div>
+        {/* Bonus Reward Section */}
+        <div className="mt-4">
+          <UserBonusReward />
         </div>
         <div className="flex items-center justify-between mt-4">
           <p className="text-primary font-roboto text-lg">Available Surveys</p>
           <button
             className="bg-highlight text-white px-4 py-2 rounded hover:bg-accent font-roboto transition duration-300"
             onClick={() => setIsBottomSheetOpen(true)}
+            aria-label="See all survey categories"
           >
             See All
           </button>
@@ -553,6 +580,7 @@ const Home = () => {
                   : 'bg-white text-primary border border-primary hover:bg-secondary'
               }`}
               onClick={() => handlePlanSelect(plan)}
+              aria-label={`Select ${plan} plan`}
             >
               {plan.charAt(0).toUpperCase() + plan.slice(1)}
               {selectedPlan === plan && <CheckCircleIcon className="h-5 w-5 inline-block ml-1" />}
@@ -567,6 +595,26 @@ const Home = () => {
           accessPlan={localUserData?.plan || userData?.plan || 'free'}
         />
       </div>
+      <style jsx>{`
+        @keyframes slide-up {
+          from {
+            transform: translateY(100%);
+          }
+          to {
+            transform: translateY(0);
+          }
+        }
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out;
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 };

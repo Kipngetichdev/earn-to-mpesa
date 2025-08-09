@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
 import logo1 from '../assets/logo1.png';
 import logo2 from '../assets/logo2.png';
+import surveyEarn from '../assets/landing/surveyearn.png';
+import watchEarn from '../assets/landing/watchearn.png';
+import spinWin from '../assets/landing/spinwin.png';
+import referEarn from '../assets/landing/referearn.png';
 
 const logos = [logo, logo1, logo2];
 
@@ -28,8 +32,7 @@ const Landing = () => {
         />
         <h1 className="text-4xl font-bold font-roboto md:text-5xl">Welcome to Earn to M-Pesa</h1>
         <p className="text-lg mt-4 font-roboto md:text-xl">
-          <p>Turn Your Smartphone into a Daily Payday. </p>
-          Earn up to <span className="text-highlight">KSh 3000</span> from home with simple tasks!
+          Turn Your Smartphone into a Daily Payday. Earn up to <span className="text-highlight">KSh 3000</span> from home with simple tasks!
         </p>
         <div className="mt-6 space-x-4">
           <button
@@ -52,22 +55,38 @@ const Landing = () => {
         <h2 className="text-2xl font-bold text-primary text-center font-roboto md:text-3xl">How It Works</h2>
         <div className="grid grid-cols-1 gap-6 mt-8 md:grid-cols-2 lg:grid-cols-4">
           <div className="bg-white p-6 rounded-lg shadow-md text-center">
-            <div className="text-4xl mb-4">📋</div>
+            <img
+              src={surveyEarn}
+              alt="Survey Earn Icon"
+              className="w-25 h-20 mx-auto mb-4"
+            />
             <h3 className="text-xl font-bold text-primary font-roboto">Complete Surveys</h3>
             <p className="text-primary font-roboto mt-2">Answer simple questions and earn up to KSh 150.</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow-md text-center">
-            <div className="text-4xl mb-4">🎥</div>
+            <img
+              src={watchEarn}
+              alt="Watch Earn Icon"
+              className="w-25 h-20 mx-auto mb-4"
+            />
             <h3 className="text-xl font-bold text-primary font-roboto">Watch Videos</h3>
             <p className="text-primary font-roboto mt-2">Watch short videos and earn up to KSh 250.</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow-md text-center">
-            <div className="text-4xl mb-4">🎰</div>
+            <img
+              src={spinWin}
+              alt="Spin to Win Icon"
+              className="w-25 h-20 mx-auto mb-4"
+            />
             <h3 className="text-xl font-bold text-primary font-roboto">Spin to Win</h3>
             <p className="text-primary font-roboto mt-2">Spin the wheel for a chance to win KSh 200!</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow-md text-center">
-            <div className="text-4xl mb-4">🤝</div>
+            <img
+              src={referEarn}
+              alt="Refer and Earn Icon"
+              className="w-25 h-20 mx-auto mb-4"
+            />
             <h3 className="text-xl font-bold text-primary font-roboto">Refer & Earn</h3>
             <p className="text-primary font-roboto mt-2">Invite friends and earn KSh 50 per referral.</p>
           </div>
@@ -94,4 +113,4 @@ const Landing = () => {
   );
 };
 
-export default Landing
+export default Landing;

@@ -23,6 +23,8 @@ import {
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import UpgradeAccount from './UpgradeAccount';
+import ActivateSurveyAccount from './ActivateSurveyAccount';
+import { getUserData } from '../services/auth';
 
 const QuizCategories = ({ plan, accessPlan, user }) => {
   const [categories, setCategories] = useState([]);
@@ -34,6 +36,7 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [disabledCategories, setDisabledCategories] = useState({});
   const [categoryCooldowns, setCategoryCooldowns] = useState({});
+  const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
   const navigate = useNavigate();
 
   // Log props for debugging
@@ -235,8 +238,26 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
   }, [categoryCooldowns]);
 
   // Handle Start Survey button click
-  const handleStartSurvey = (category) => {
+  const handleStartSurvey = async (category) => {
     console.log('QuizCategories handleStartSurvey:', { effectivePlan, categoryTier: category.tier });
+    if (user) {
+      try {
+        const { data } = await getUserData(user.uid);
+        if (!data.isSurveyAccountActivated) {
+          setIsActivateModalOpen(true);
+          console.log('QuizCategories opening activate survey modal');
+          return;
+        }
+      } catch (err) {
+        console.error('QuizCategories fetch user data error:', err);
+        setError('Failed to verify survey account status. Please try again.');
+        return;
+      }
+    } else {
+      setError('Please sign in to start a survey.');
+      return;
+    }
+
     const isAccessible =
       effectivePlan === 'premium' ||
       (effectivePlan === 'standard' && (category.tier === 'free' || category.tier === 'standard')) ||
@@ -362,6 +383,13 @@ const QuizCategories = ({ plan, accessPlan, user }) => {
         }}
         tier={selectedTier}
         user={user}
+      />
+      <ActivateSurveyAccount
+        isOpen={isActivateModalOpen}
+        onClose={() => {
+          setIsActivateModalOpen(false);
+          console.log('QuizCategories activate survey modal closed');
+        }}
       />
     </div>
   );

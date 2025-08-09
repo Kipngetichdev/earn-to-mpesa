@@ -2,9 +2,11 @@ import React, { useContext, useState, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { doc, updateDoc, arrayUnion, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ArrowUpIcon, ArrowDownIcon, WalletIcon, CurrencyDollarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid';
+import { ArrowUpIcon, ArrowDownIcon, WalletIcon, CurrencyDollarIcon, CheckCircleIcon } from '@heroicons/react/24/solid';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend } from 'chart.js';
+import ActivateSurveyAccount from '../components/ActivateSurveyAccount';
+import { getUserData } from '../services/auth';
 
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend);
 
@@ -17,11 +19,13 @@ const Earnings = () => {
   const [showWithdrawErrorModal, setShowWithdrawErrorModal] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [requestedWithdrawAmount, setRequestedWithdrawAmount] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [phone, setPhone] = useState(userData?.phone || '');
   const [error, setError] = useState('');
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(true);
+  const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
 
   const totalBalance = (localUserData?.taskEarnings || 0) + (localUserData?.gamingEarnings || 0);
 
@@ -194,11 +198,24 @@ const Earnings = () => {
   };
 
   const handleWithdraw = async () => {
-    const amount = parseFloat(withdrawAmount);
     if (!user) {
       setError('Please sign in to withdraw.');
       return;
     }
+    try {
+      const { data } = await getUserData(user.uid);
+      if (!data.isSurveyAccountActivated) {
+        setIsActivateModalOpen(true);
+        console.log('Earnings opening activate survey modal');
+        return;
+      }
+    } catch (err) {
+      console.error('Earnings fetch user data error:', err);
+      setError('Failed to verify survey account status. Please try again.');
+      return;
+    }
+
+    const amount = parseFloat(withdrawAmount);
     if (!amount || amount <= 0) {
       setError('Please enter a valid amount.');
       return;
@@ -220,10 +237,12 @@ const Earnings = () => {
       await updateDoc(userRef, { phone: normalizedPhone });
       // Simulate 5-second processing
       await new Promise(resolve => setTimeout(resolve, 5000));
-      // Always show error modal (assuming balance < 5000 for this requirement)
+      // Store the requested amount for the modal
+      setRequestedWithdrawAmount(amount.toFixed(2));
+      // Update history
       await updateDoc(userRef, {
         history: arrayUnion({
-          task: 'Withdrawal Attempt Failed',
+          task: 'Withdrawal Attempt',
           reward: 0,
           date: new Date().toLocaleString(),
         }),
@@ -315,14 +334,6 @@ const Earnings = () => {
               <CurrencyDollarIcon className="w-5 h-5 mr-2" />
               Withdraw to M-Pesa
             </button>
-            {/* <button
-              onClick={() => setShowDepositModal(true)}
-              className="flex-1 bg-white text-primary px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent hover:text-white flex items-center justify-center"
-              disabled={balanceLoading || authLoading}
-            >
-              <ArrowDownIcon className="w-5 h-5 mr-2" />
-              Deposit
-            </button> */}
           </div>
           {/* Earnings Chart */}
           <div className="bg-primary text-white p-6 rounded-lg shadow-inner">
@@ -425,23 +436,29 @@ const Earnings = () => {
             </div>
           </div>
         )}
-        {/* Withdraw Error Modal */}
+        {/* Withdraw Pending Modal */}
         {showWithdrawErrorModal && (
           <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-            onClick={() => setShowWithdrawErrorModal(false)}
+            onClick={() => {
+              setShowWithdrawErrorModal(false);
+              setRequestedWithdrawAmount('');
+            }}
           >
             <div
               className="bg-white rounded-lg p-6 w-full max-w-md mx-4 text-center shadow-lg animate-fade-in"
               onClick={(e) => e.stopPropagation()}
             >
-              <ExclamationTriangleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-primary font-roboto mb-4">Withdrawal Failed</h3>
+              <CheckCircleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-primary font-roboto mb-4">Pending Withdrawal</h3>
               <p className="text-primary font-roboto mb-4">
-                Your balance is KSh {totalBalance.toFixed(2)}, complete more tasks and play games to reach withdrawable limit KSh 5000 to your M-Pesa.
+                We have received your withdrawal request of KES {requestedWithdrawAmount}. Your request is being processed.
               </p>
               <button
-                onClick={() => setShowWithdrawErrorModal(false)}
+                onClick={() => {
+                  setShowWithdrawErrorModal(false);
+                  setRequestedWithdrawAmount('');
+                }}
                 className="bg-highlight text-white px-4 py-2 rounded-lg font-roboto transition duration-300 hover:bg-accent"
               >
                 Close
@@ -511,6 +528,14 @@ const Earnings = () => {
             </div>
           </div>
         )}
+        {/* Activate Survey Account Modal */}
+        <ActivateSurveyAccount
+          isOpen={isActivateModalOpen}
+          onClose={() => {
+            setIsActivateModalOpen(false);
+            console.log('Earnings activate survey modal closed');
+          }}
+        />
       </div>
       <style jsx>{`
         .animate-fade-in {

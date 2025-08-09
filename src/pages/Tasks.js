@@ -34,7 +34,7 @@ const Tasks = () => {
   const [transactionId, setTransactionId] = useState('');
 
   const stakes = [20, 50, 100, 150, 200, 300];
-  const apiUrl = process.env.REACT_APP_API_URL || 'https://earn-to-mpesa.vercel.app';
+  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
   const data = [
     { option: 'KSh 0.00', style: { backgroundColor: '#03A6A1', textColor: 'white' } },
@@ -428,7 +428,7 @@ const Tasks = () => {
                 </div>
               </div>
               <p className="text-lg font-roboto">
-                Gaming Earnings: KSh {localUserData?.gamingEarnings ? localUserData.gamingEarnings.toFixed(2) : '0.00'}
+                Gaming & Rewards: KSh {localUserData?.gamingEarnings ? localUserData.gamingEarnings.toFixed(2) : '0.00'}
               </p>
               <p className="text-lg font-roboto">
                 Tasks Earnings: KSh {localUserData?.taskEarnings ? localUserData.taskEarnings.toFixed(2) : '0.00'}
