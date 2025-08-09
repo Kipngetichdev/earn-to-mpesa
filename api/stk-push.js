@@ -47,7 +47,6 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Get PayHero credentials from environment variables
     const apiUsername = process.env.PAYHERO_API_USERNAME;
     const apiPassword = process.env.PAYHERO_API_PASSWORD;
     if (!apiUsername || !apiPassword) {
