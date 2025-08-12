@@ -7,7 +7,7 @@ import axios from 'axios';
 
 const ActivateSurveyAccount = ({ isOpen, onClose }) => {
   const { user, userData } = useContext(AuthContext);
-  const [phone, setPhone] = useState(userData?.phone ? `0${userData.phone.slice(3)}` : '');
+  const [phone, setPhone] = useState(userData?.phone ? `0${userData.phone.slice(1)}` : '');
   const [phoneError, setPhoneError] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

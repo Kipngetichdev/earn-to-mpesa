@@ -101,7 +101,7 @@ const UserBonusReward = () => {
               muted
               className="h-12 w-12 mx-auto mb-4 object-contain"
             ></video>
-            <h3 className="text-lg font-bold text-primary font-roboto mb-4">Payment Received!</h3>
+            <h3 className="text-lg font-bold text-primary font-roboto mb-4">Congratulations {userData.username},You have Received Ksh 499 sign up Bonus. Collect reward and do tasks to earn more.</h3>
             <table className="table-auto w-full bg-gray-100 rounded border border-gray-300 mb-4 text-primary font-roboto text-sm">
               <tbody>
                 <tr className="border-b border-gray-300">
