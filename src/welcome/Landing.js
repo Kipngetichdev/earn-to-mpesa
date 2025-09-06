@@ -8,7 +8,7 @@ import logo2 from '../assets/logo2.png';
 import surveyEarn from '../assets/landing/surveyearn.png';
 import watchEarn from '../assets/landing/watchearn.png';
 import referEarn from '../assets/landing/referearn.png';
-import mpesaLogo from '../assets/mpesa.png'
+import mpesaLogo from '../assets/mpesa.png';
 import { WithdrawalToast } from '../data/withdrawals';
 
 const logos = [logo, logo1, logo2];
@@ -36,20 +36,19 @@ const Landing = () => {
         <h1 className="text-4xl font-bold font-roboto leading-tight sm:text-5xl md:text-6xl">
           Welcome to Earn to M-Pesa
         </h1>
-        
         <p className="text-lg mt-4 font-roboto max-w-2xl mx-auto leading-relaxed sm:text-xl">
           Turn Your Smartphone into a <span className="text-highlight font-semibold">Daily Payday</span>. Earn up to <span className="text-highlight font-semibold">KSh 3000</span> from home with simple tasks!
         </p>
-        <div className="mt-8 space-x-4 flex justify-center">
+        <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4 flex-wrap">
           <button
-            className="bg-highlight text-white px-8 py-3 rounded-full font-roboto text-lg font-medium hover:bg-accent transform hover:scale-105 transition duration-300"
+            className="w-full sm:w-auto bg-highlight text-white px-6 py-4 rounded-full font-roboto text-lg sm:text-xl font-medium shadow-md hover:bg-accent hover:shadow-lg transform hover:scale-105 active:scale-95 transition duration-300"
             onClick={() => navigate('/signup')}
             aria-label="Sign up to start earning with Earn to M-Pesa"
           >
             Get Started
           </button>
           <button
-            className="bg-white text-primary px-8 py-3 rounded-full font-roboto text-lg font-medium border border-primary hover:bg-accent hover:text-white transform hover:scale-105 transition duration-300"
+            className="w-full sm:w-auto bg-white text-primary px-6 py-4 rounded-full font-roboto text-lg sm:text-xl font-medium border-2 border-primary shadow-md hover:bg-accent hover:text-white hover:shadow-lg transform hover:scale-105 active:scale-95 transition duration-300"
             onClick={() => navigate('/signin')}
             aria-label="Sign in to your Earn to M-Pesa account"
           >
@@ -58,6 +57,10 @@ const Landing = () => {
         </div>
       </section>
 
+      {/* Withdrawal Toasts */}
+      {/* <div className="w-full max-w-md mx-auto relative">
+        <WithdrawalToast />
+      </div> */}
 
       {/* Features Section */}
       <section className="py-16 px-4 bg-gray-50">
@@ -109,7 +112,7 @@ const Landing = () => {
           Join thousands of users earning with M-Pesa withdrawals. Your next payday is just a survey away!
         </p>
         <button
-          className="bg-highlight text-white px-10 py-4 mt-8 rounded-full font-roboto text-lg font-medium hover:bg-white hover:text-primary transform hover:scale-105 transition duration-300"
+          className="bg-highlight text-white px-10 py-4 mt-8 rounded-full font-roboto text-lg sm:text-xl font-medium shadow-md hover:bg-white hover:text-primary hover:shadow-lg transform hover:scale-105 active:scale-95 transition duration-300"
           onClick={() => navigate('/signup')}
           aria-label="Join now to start earning with Earn to M-Pesa"
         >
@@ -119,6 +122,11 @@ const Landing = () => {
 
       {/* Footer */}
       <footer className="bg-primary text-white text-center py-8">
+        <img
+          src={mpesaLogo}
+          alt="M-Pesa Logo"
+          className="w-24 h-8 mx-auto mb-4"
+        />
         <p className="font-roboto text-sm">© {new Date().getFullYear()} Earn to M-Pesa. All rights reserved.</p>
         <div className="mt-4 space-x-4">
           <a href="#" className="text-white hover:text-highlight font-roboto text-sm" aria-label="Visit our Twitter page">Twitter</a>
