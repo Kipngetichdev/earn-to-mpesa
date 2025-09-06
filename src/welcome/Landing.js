@@ -125,7 +125,7 @@ const Landing = () => {
         <img
           src={mpesaLogo}
           alt="M-Pesa Logo"
-          className="w-24 h-8 mx-auto mb-4"
+          className=" h-8 mx-auto mb-4"
         />
         <p className="font-roboto text-sm">© {new Date().getFullYear()} Earn to M-Pesa. All rights reserved.</p>
         <div className="mt-4 space-x-4">
