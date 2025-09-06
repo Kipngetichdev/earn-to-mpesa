@@ -30,6 +30,7 @@ import ActivateSurveyAccount from '../components/ActivateSurveyAccount';
 import UserBonusReward from '../components/UserBonusReward';
 import { getUserData } from '../services/auth';
 import surveyImage from '../assets/survey.png';
+import { WithdrawalToast } from '../data/withdrawals'; // Import WithdrawalToast
 
 const BottomSheet = ({ isOpen, onClose, user, accessPlan }) => {
   const [categories, setCategories] = useState([]);
@@ -506,10 +507,15 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-secondary font-roboto flex items-start justify-center px-4 pt-4">
       <div className="w-full max-w-md">
-        <h2 className="text-left font-bold text-primary font-roboto mb-4">
+        <h2 className="text-left font-bold text-primary font-roboto ">
           {greetingText} {emoji}
         </h2>
-        <div className="bg-primary text-white p-4 rounded-lg shadow-inner space-y-2">
+        {/* withdrawal toasts */}
+        <div className="w-full max-w-md h-[30px]">
+          <WithdrawalToast />
+        </div>
+        
+        <div className="bg-primary text-white p-4 rounded-lg shadow-inner mt-1 space-y-2">
           {balanceLoading || authLoading ? (
             <p className="text-lg font-roboto text-center">Loading balance...</p>
           ) : (
@@ -527,7 +533,7 @@ const Home = () => {
                 </div>
               </div>
               <p className="text-lg font-roboto">
-                Gaming & Rewards: KSh {localUserData?.gamingEarnings ? localUserData.gamingEarnings.toFixed(2) : '0.00'}
+                Rewards: KSh {localUserData?.gamingEarnings ? localUserData.gamingEarnings.toFixed(2) : '0.00'}
               </p>
               <p className="text-lg font-roboto">
                 Tasks Earnings: KSh {localUserData?.taskEarnings ? localUserData.taskEarnings.toFixed(2) : '0.00'}

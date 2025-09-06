@@ -10,7 +10,6 @@ const BottomNav = () => {
 
   const navItems = [
     { path: '/home', label: 'Home', icon: HomeIcon },
-    { path: '/tasks', label: 'Games', icon: PuzzlePieceIcon },
     { path: '/refer', label: 'Refer', icon: UserPlusIcon },
     { path: '/earnings', label: 'Wallet', icon: CurrencyDollarIcon },
   ];
