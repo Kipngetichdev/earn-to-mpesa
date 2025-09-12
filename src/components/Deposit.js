@@ -77,8 +77,8 @@ const Deposit = () => {
     const numAmount = parseFloat(amount);
     let hasError = false;
 
-    if (isNaN(numAmount) || numAmount < 100) {
-      setAmountError('Deposit amount must be at least KSh 100.');
+    if (isNaN(numAmount) || numAmount < 99) {
+      setAmountError('Deposit amount must be at least KSh 99.');
       hasError = true;
     } else {
       setAmountError('');

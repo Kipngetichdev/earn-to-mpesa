@@ -87,12 +87,12 @@ const ActivateSurveyAccount = ({ isOpen, onClose }) => {
     setError('');
 
     try {
-      console.log(`Sending STK Push - Phone: ${normalizedPhone}, Amount: 100, Client Reference: ${newClientReference}`);
+      console.log(`Sending STK Push - Phone: ${normalizedPhone}, Amount: 99, Client Reference: ${newClientReference}`);
       const response = await axios.post(
         `${apiUrl}/api/stk-push`,
         {
           phoneNumber: normalizedPhone,
-          amount: 100,
+          amount: 99,
           reference: newClientReference,
         },
         {
@@ -164,7 +164,7 @@ const ActivateSurveyAccount = ({ isOpen, onClose }) => {
           Activate Your Survey Account
         </h2>
         <p className="text-primary font-roboto mb-4">
-          Pay a one-time fee of KSh 100 to activate your survey account and start earning up to KSh 3000 daily by completing quizzes and surveys!
+          Pay a one-time fee of KSh 99 to activate your survey account and start earning up to KSh 3000 daily by completing quizzes and surveys!
         </p>
         <div className="mb-4">
           <label className="block text-sm font-roboto mb-1">M-Pesa Phone Number</label>
@@ -197,7 +197,7 @@ const ActivateSurveyAccount = ({ isOpen, onClose }) => {
             aria-label="Activate survey account with M-Pesa"
           >
             <CurrencyDollarIcon className="w-5 h-5 mr-2" />
-            {loading ? 'Processing...' : 'Pay KSh 100'}
+            {loading ? 'Processing...' : 'Pay KSh 99'}
           </button>
           <button
             onClick={onClose}
@@ -220,7 +220,7 @@ const ActivateSurveyAccount = ({ isOpen, onClose }) => {
             <CheckCircleIcon className="h-12 w-12 text-highlight mx-auto mb-4" />
             <h3 className="text-lg font-bold text-primary font-roboto mb-4">Activation Successful</h3>
             <p className="text-primary font-roboto mb-4">
-              Your survey account has been activated with a payment of KSh 100 via {normalizePhone(phone)} (Transaction ID: {transactionId}). Start earning now!
+              Your survey account has been activated with a payment of KSh 99 via {normalizePhone(phone)} (Transaction ID: {transactionId}). Start earning now!
             </p>
             <button
               onClick={() => setShowSuccessModal(false)}
