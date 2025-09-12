@@ -13,26 +13,45 @@ export const AuthProvider = ({ children }) => {
   // Load user from localStorage and set up real-time listener
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem('user'));
-    if (storedUser) {
+    console.log('Full storedUser:', storedUser); // Debug
+    console.log('storedUser.uid:', storedUser?.uid, 'Type:', typeof storedUser?.uid); // Debug
+    console.log('db instance:', db, 'Type:', typeof db); // Debug
+
+    if (storedUser && typeof storedUser.uid === 'string' && storedUser.uid.length > 0 && db) {
       setUser(storedUser);
-      const userRef = doc(db, 'users', storedUser.uid);
-      const unsubscribe = onSnapshot(userRef, (doc) => {
-        if (doc.exists()) {
-          setUserData(doc.data());
-          console.log('AuthContext real-time userData:', doc.data()); // Debug
-        } else {
+      try {
+        const userRef = doc(db, 'users', storedUser.uid);
+        const unsubscribe = onSnapshot(userRef, (doc) => {
+          if (doc.exists()) {
+            setUserData(doc.data());
+            console.log('AuthContext real-time userData:', doc.data()); // Debug
+          } else {
+            setUser(null);
+            setUserData(null);
+            localStorage.removeItem('user');
+            console.log('AuthContext: User not found, clearing session');
+          }
+          setLoading(false);
+        }, (err) => {
+          console.error('AuthContext real-time error:', err);
           setUser(null);
           setUserData(null);
           localStorage.removeItem('user');
-          console.log('AuthContext: User not found, clearing session');
-        }
+          setLoading(false);
+        });
+        return () => unsubscribe();
+      } catch (err) {
+        console.error('Firestore doc creation failed:', err);
+        setUser(null);
+        setUserData(null);
+        localStorage.removeItem('user');
         setLoading(false);
-      }, (err) => {
-        console.error('AuthContext real-time error:', err);
-        setLoading(false);
-      });
-      return () => unsubscribe();
+      }
     } else {
+      console.warn('Invalid stored user or db, clearing:', storedUser);
+      localStorage.removeItem('user');
+      setUser(null);
+      setUserData(null);
       setLoading(false);
     }
   }, []);
@@ -40,26 +59,40 @@ export const AuthProvider = ({ children }) => {
   // Handle signin
   const handleSignin = async (identifier, password) => {
     const { user, error } = await signin({ identifier, password });
-    if (user) {
-      setUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
-      const { data } = await getUserData(user.uid);
-      if (data) {
-        setUserData(data);
-        console.log('AuthContext signin userData:', data); // Debug
+    if (user && user.uid) {
+      const safeUser = { uid: user.uid, email: user.email || '' }; // Minimal safe object
+      setUser(safeUser);
+      localStorage.setItem('user', JSON.stringify(safeUser));
+      try {
+        const { data } = await getUserData(user.uid);
+        if (data) {
+          setUserData(data);
+          console.log('AuthContext signin userData:', data); // Debug
+        }
+        return { user: safeUser, error: null };
+      } catch (err) {
+        console.error('getUserData failed:', err);
+        return { user: safeUser, error: err.message };
       }
-      return { user, error: null };
     }
     return { user: null, error };
   };
 
   // Handle signout
   const handleSignout = async () => {
-    await signout();
-    setUser(null);
-    setUserData(null);
-    localStorage.removeItem('user');
-    console.log('AuthContext: User signed out'); // Debug
+    try {
+      await signout();
+      setUser(null);
+      setUserData(null);
+      localStorage.removeItem('user');
+      console.log('AuthContext: User signed out'); // Debug
+    } catch (err) {
+      console.error('Signout failed:', err);
+      // Still clear local state even if signout fails
+      setUser(null);
+      setUserData(null);
+      localStorage.removeItem('user');
+    }
   };
 
   return (

@@ -488,9 +488,9 @@ const Home = () => {
   const getGreeting = () => {
     const date = new Date();
     const hours = date.getUTCHours() + 3; // Adjust for EAT
-    if (hours < 12) return { text: `Habari za Asubuhi, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '☀️' };
-    if (hours < 18) return { text: `Habari za Mchana, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '🌞' };
-    return { text: `Habari za Usiku, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '🌙' };
+    if (hours < 12) return { text: `Good Morning, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '☀️' };
+    if (hours < 18) return { text: `Good Afternoon, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '🌞' };
+    return { text: `Good Evening, ${localUserData?.username || userData?.username || 'User'}!`, emoji: '🌙' };
   };
 
   const { text: greetingText, emoji } = getGreeting();
