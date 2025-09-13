@@ -417,7 +417,6 @@ const Home = () => {
     }
   }, [userData, authLoading]);
 
-  // Fetch user data and set up real-time listener
   useEffect(() => {
     if (!user || authLoading) {
       setBalanceLoading(false);
