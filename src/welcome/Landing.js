@@ -10,6 +10,7 @@ import watchEarn from '../assets/landing/watchearn.png';
 import referEarn from '../assets/landing/referearn.png';
 import mpesaLogo from '../assets/mpesa.png';
 import { WithdrawalToast } from '../data/withdrawals';
+import InstallButton from '../components/InstallButton'; // Import the new InstallButton component
 
 const logos = [logo, logo1, logo2];
 
@@ -125,7 +126,7 @@ const Landing = () => {
         <img
           src={mpesaLogo}
           alt="M-Pesa Logo"
-          className=" h-8 mx-auto mb-4"
+          className="h-8 mx-auto mb-4"
         />
         <p className="font-roboto text-sm">© {new Date().getFullYear()} Earn to M-Pesa. All rights reserved.</p>
         <div className="mt-4 space-x-4">
@@ -134,6 +135,9 @@ const Landing = () => {
           <a href="#" className="text-white hover:text-highlight font-roboto text-sm" aria-label="Visit our Instagram page">Instagram</a>
         </div>
       </footer>
+
+      {/* Install Button Card */}
+      <InstallButton />
 
       <style jsx>{`
         @keyframes fade {
