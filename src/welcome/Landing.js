@@ -38,7 +38,7 @@ const Landing = () => {
           Welcome to Earn to M-Pesa
         </h1>
         <p className="text-lg mt-4 font-roboto max-w-2xl mx-auto leading-relaxed sm:text-xl">
-          Turn Your Smartphone into a <span className="text-highlight font-semibold">Daily Payday</span>. Earn up to <span className="text-highlight font-semibold">KSh 3000</span> from home with simple tasks!
+          Turn Your Smartphone into a <span className="text-highlight font-semibold">Daily Payday</span>. Earn up to <span className="text-highlight font-semibold">KSh 100,000</span> from home with simple tasks!
         </p>
         <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4 flex-wrap">
           <button

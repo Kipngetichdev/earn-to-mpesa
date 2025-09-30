@@ -57,7 +57,7 @@ const InstallButton = () => {
           <FontAwesomeIcon icon={faDownload} className="text-highlight h-5 w-5 mr-3" />
           <div>
             <p className="text-primary font-roboto font-bold text-lg">Install Earn to M-Pesa</p>
-            <p className="text-primary font-roboto text-sm">Download for free and start earning up to KSh 3000!</p>
+            <p className="text-primary font-roboto text-sm">Download for free and start earning up to KSh 100,000!</p>
           </div>
         </div>
         <button
